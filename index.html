@@ -221,6 +221,26 @@
   const TOUCH_DEADZONE = 1 / 320;
   let lastSent = null;
 
+  // ---------- main menu: keyboard access-keys, not the mouse ----------
+  // Confirmed interactively (CDP): the title screen's game list does not respond to mouse
+  // clicks at all (verified with motion+button in many combinations, both buttons, held,
+  // repeated) — only the underlined access-key letters (C/G/D/B/Y) move the selection, and
+  // pressing the SAME letter again is what actually enters that game (a single press only
+  // highlights the row; it does not open it, even after a long wait). Row boundaries below are
+  // exact pixel-measured black-separator positions in the native 320x200 frame (not guessed).
+  const MENU_ROWS = [
+    { yMin: 77 / 200, yMax: 92 / 200, letter: 67 },  // Checkers
+    { yMin: 92 / 200, yMax: 107 / 200, letter: 71 }, // Go Fish
+    { yMin: 107 / 200, yMax: 122 / 200, letter: 68 }, // Dominoes
+    { yMin: 122 / 200, yMax: 137 / 200, letter: 66 }, // Backgammon
+    { yMin: 137 / 200, yMax: 152 / 200, letter: 89 }, // Yacht
+  ];
+  const MENU_X_MIN = 50 / 320, MENU_X_MAX = 150 / 320;
+  function menuRowAt(x, y) {
+    if (x < MENU_X_MIN || x > MENU_X_MAX) return null;
+    return MENU_ROWS.find((r) => y >= r.yMin && y < r.yMax) || null;
+  }
+
   let pointerDown = false;
   function bindPointer() {
     touchEl.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -233,6 +253,15 @@
       if (!gameCi) return;
       touchEl.setPointerCapture(e.pointerId);
       const { x, y } = normPos(e.clientX, e.clientY);
+      const row = menuRowAt(x, y);
+      if (row) {
+        // First press selects the row, second press (shortly after) opens it.
+        gameCi.simulateKeyPress(row.letter);
+        setTimeout(() => gameCi && gameCi.simulateKeyPress(257 /* Enter */), 700);
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       gameCi.sendMouseMotion(x, y);
       gameCi.sendMouseButton(e.button === 2 ? 1 : 0, true);
       pointerDown = true;
