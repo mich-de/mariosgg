@@ -18,8 +18,17 @@
   #stage { position: fixed; inset: 0; display: grid; place-items: center; background: #000; }
   /* js-dos sets its own inline width/height/position on the element it mounts into, so the
      correct 320x200 (8/5) box lives one level up, where js-dos never touches it. */
-  #box { width: min(100vw, 160vh); aspect-ratio: 320 / 200; }
-  #jsdos { touch-action: none; -webkit-user-select: none; user-select: none; }
+  #box { position: relative; width: min(100vw, 160vh); aspect-ratio: 320 / 200; }
+  #jsdos { position: absolute; inset: 0; }
+  /* js-dos attaches its own pointer/touch listeners straight to its canvas (for a mouse-capture
+     overlay this page doesn't use), which raced with this page's own listeners on #jsdos itself
+     and could win, leaving the in-game cursor not following a real finger. A transparent catcher
+     on top gets every pointer event first, before js-dos's own canvas ever sees it. */
+  #touchCatcher {
+    position: absolute; inset: 0; z-index: 5;
+    touch-action: none; -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
 
   #launcher {
     position: fixed; inset: 0; z-index: 10;
@@ -83,7 +92,7 @@
 </head>
 <body>
 
-<div id="stage"><div id="box"><div id="jsdos"></div></div></div>
+<div id="stage"><div id="box"><div id="jsdos"></div><div id="touchCatcher"></div></div></div>
 
 <button id="fs" hidden aria-label="Toggle full screen">⛶</button>
 <div id="rotateHint" hidden><span>↻ Rotate for full screen</span></div>
@@ -103,6 +112,7 @@
   const launcher = document.getElementById("launcher");
   const playBtn = document.getElementById("playBtn");
   const jsdosEl = document.getElementById("jsdos");
+  const touchEl = document.getElementById("touchCatcher");
   const fsBtn = document.getElementById("fs");
 
   const touch = matchMedia("(pointer: coarse)").matches;
@@ -172,7 +182,7 @@
   // here directly against the DOS mouse API instead of js-dos's built-in capture/overlay, so the
   // very same code path drives a hovering desktop mouse and a tapping/dragging touch screen.
   function normPos(clientX, clientY) {
-    const rect = jsdosEl.getBoundingClientRect();
+    const rect = touchEl.getBoundingClientRect();
     const px = clientX - rect.left, py = clientY - rect.top;
     const frameW = gameCi.width(), frameH = gameCi.height();
     const boxW = rect.width, boxH = rect.height;
@@ -187,11 +197,11 @@
 
   let pointerDown = false;
   function bindPointer() {
-    jsdosEl.addEventListener("contextmenu", (e) => e.preventDefault());
+    touchEl.addEventListener("contextmenu", (e) => e.preventDefault());
 
-    jsdosEl.addEventListener("pointerdown", (e) => {
+    touchEl.addEventListener("pointerdown", (e) => {
       if (!gameCi) return;
-      jsdosEl.setPointerCapture(e.pointerId);
+      touchEl.setPointerCapture(e.pointerId);
       const { x, y } = normPos(e.clientX, e.clientY);
       gameCi.sendMouseMotion(x, y);
       gameCi.sendMouseButton(e.button === 2 ? 1 : 0, true);
@@ -199,7 +209,7 @@
       e.preventDefault();
     });
 
-    jsdosEl.addEventListener("pointermove", (e) => {
+    touchEl.addEventListener("pointermove", (e) => {
       if (!gameCi) return;
       // Desktop: track hover even with no button down, so the in-game cursor follows the mouse.
       // Touch/pen: there is no hover, so this only fires while a finger/pen is already down.
@@ -215,8 +225,8 @@
       gameCi.sendMouseButton(e.button === 2 ? 1 : 0, false);
       e.preventDefault();
     };
-    jsdosEl.addEventListener("pointerup", release);
-    jsdosEl.addEventListener("pointercancel", release);
+    touchEl.addEventListener("pointerup", release);
+    touchEl.addEventListener("pointercancel", release);
     addEventListener("blur", () => {
       if (pointerDown && gameCi) { gameCi.sendMouseButton(0, false); pointerDown = false; }
     });
