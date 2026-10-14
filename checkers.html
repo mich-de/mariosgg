@@ -10,21 +10,44 @@
 <style>
   * { box-sizing: border-box; }
   html, body {
-    margin: 0; width: 100%; height: 100%; overflow: hidden;
-    background: #04150a; color: #f4e9c9;
+    margin: 0; width: 100%; height: 100%; overflow: hidden auto;
+    color: #f4e9c9;
     font-family: "Trebuchet MS", "Segoe UI", sans-serif;
   }
   body {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: .6rem;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    /* same gold/brown the original's own wallpaper sits on, sampled from the game */
+    background: radial-gradient(ellipse at top, #c88a1a 0%, #5a3a0a 60%, #2a1a04 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    gap: .5rem; min-height: 100%;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) calc(env(safe-area-inset-bottom) + .5rem) env(safe-area-inset-left);
   }
 
-  header { text-align: center; }
-  h1 { margin: .2rem 0; font-size: clamp(1rem, 4vw, 1.4rem); letter-spacing: .03em; }
-  p.sub { margin: 0; opacity: .7; font-size: clamp(.7rem, 2.5vw, .85rem); }
-  a.back { color: #ffd34d; text-decoration: none; }
+  header { text-align: center; margin-top: .4rem; }
+  #titleLogo { width: min(80vw, 340px); image-rendering: pixelated; display: block; }
+  p.sub { margin: .2rem 0 0; opacity: .85; font-size: clamp(.65rem, 2.3vw, .8rem); }
+  a.back { color: #1a2e0d; font-weight: bold; text-decoration: none; }
   a.back:hover { text-decoration: underline; }
+
+  /* Mario + nameplates, laid out exactly like the original: his portrait centered,
+     a player nameplate flanking him on each side. */
+  #marioRow {
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+    width: min(92vw, 70vh, 480px);
+  }
+  #marioPortrait {
+    width: clamp(64px, 20vw, 110px); image-rendering: pixelated;
+    border-radius: 6px;
+  }
+  .nameplate {
+    flex: 1 1 0; min-width: 0;
+    background: #8a0000; border: 3px solid #d89a1a; border-radius: 6px;
+    padding: .3em .5em;
+    text-align: center;
+    font-weight: bold; font-size: clamp(.6rem, 2.6vw, .85rem);
+    color: #ffcc33; text-shadow: 1px 1px 0 #3a0000;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .nameplate.active { outline: 2px solid #fff7b0; outline-offset: 2px; }
 
   #stage {
     width: min(92vw, 70vh, 480px);
@@ -35,50 +58,51 @@
   #board {
     width: 100%; height: 100%; display: block;
     image-rendering: pixelated;
-    border: 4px solid #8a5a1e; border-radius: 4px;
+    border: 5px solid #d89a1a; border-radius: 4px;
     box-shadow: 0 10px 30px rgba(0,0,0,.6);
   }
 
   #status {
-    min-height: 1.6em;
-    font-size: clamp(.9rem, 3vw, 1.1rem);
+    width: min(92vw, 70vh, 480px);
+    min-height: 1.8em;
+    font-size: clamp(.85rem, 3vw, 1.05rem);
     font-weight: bold;
     text-align: center;
-    color: #ffd34d;
+    color: #6a0000;
+    background: #ffd34d;
+    border: 3px solid #8a5a1e; border-radius: 6px;
+    padding: .3em .6em;
   }
 
-  #controls { display: flex; gap: .6rem; }
+  #controls { display: flex; gap: .6rem; margin-bottom: .4rem; }
   button.pill {
     font: inherit; font-weight: bold; font-size: .85rem;
-    padding: .55em 1.4em; border-radius: 999px; border: none;
+    padding: .5em 1.3em; border-radius: 999px; border: none;
     background: #ffd34d; color: #1a2e0d; cursor: pointer;
-    box-shadow: 0 4px 0 #b8861a;
+    box-shadow: 0 4px 0 #8a5a1e;
   }
-  button.pill:active { transform: translateY(3px); box-shadow: 0 1px 0 #b8861a; }
-  button.pill.ghost { background: transparent; color: #f4e9c9; border: 2px solid #f4e9c9; box-shadow: none; }
-
-  .legend { display: flex; gap: 1.2rem; font-size: .75rem; opacity: .8; align-items: center; }
-  .legend span { display: inline-flex; align-items: center; gap: .35em; }
-  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  button.pill:active { transform: translateY(3px); box-shadow: 0 1px 0 #8a5a1e; }
+  button.pill.ghost { background: rgba(0,0,0,.25); color: #fff; border: 2px solid #f4e9c9; box-shadow: none; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>CHECKERS</h1>
+  <img id="titleLogo" src="assets/title_checkers.png" alt="Checkers">
   <p class="sub">Native pilot — no DOS emulation, piece art captured from the original game. <a class="back" href="index.html">← back to the gallery</a></p>
 </header>
+
+<div id="marioRow">
+  <div class="nameplate" id="aiPlate">MARIO</div>
+  <img id="marioPortrait" src="assets/mario_portrait.png" alt="Mario">
+  <div class="nameplate active" id="playerPlate">YOU</div>
+</div>
 
 <div id="stage">
   <canvas id="board" width="320" height="320"></canvas>
 </div>
 
 <div id="status">You go first.</div>
-
-<div class="legend">
-  <span><span class="swatch" style="background:#4a8a3a"></span> You (Yoshi)</span>
-  <span><span class="swatch" style="background:#c8551a"></span> Mario (Koopa)</span>
-</div>
 
 <div id="controls">
   <button class="pill" id="newGameBtn" type="button">New game</button>
@@ -177,7 +201,7 @@
   let imagesReady = 0;
   [koopaImg, yoshiImg].forEach((img) => { img.onload = () => { imagesReady++; draw(); }; });
 
-  const DARK = "#7a1010", LIGHT = "#1a1a1a", EDGE = "#3a0a0a";
+  const DARK = "#b20000", LIGHT = "#000000", EDGE = "#3a0a0a"; // exact colors sampled from the original board
 
   function squaresWithMoves(side) {
     const moves = allMoves(board, side);
@@ -273,7 +297,13 @@
   }
 
   // ---------- turn flow ----------
+  const aiPlate = document.getElementById("aiPlate");
+  const playerPlate = document.getElementById("playerPlate");
   function setStatus(text) { statusEl.textContent = text; }
+  function updatePlates() {
+    aiPlate.classList.toggle("active", turn === AI && !gameOver);
+    playerPlate.classList.toggle("active", turn === PLAYER && !gameOver);
+  }
 
   function countSide(side) {
     let n = 0;
@@ -296,6 +326,7 @@
     turn = AI;
     selected = null; legalForSelected = [];
     draw();
+    updatePlates();
     setStatus("Mario is thinking...");
     setTimeout(aiStep, 650);
   }
@@ -329,9 +360,10 @@
   }
 
   function finishAiTurn() {
-    if (checkGameOver()) { draw(); return; }
+    if (checkGameOver()) { updatePlates(); draw(); return; }
     turn = PLAYER;
     setStatus("Your turn.");
+    updatePlates();
     draw();
   }
 
@@ -369,7 +401,7 @@
           }
         }
         selected = null; legalForSelected = [];
-        if (checkGameOver()) { draw(); return; }
+        if (checkGameOver()) { updatePlates(); draw(); return; }
         startAiTurn();
         return;
       }
@@ -405,6 +437,7 @@
     board = initialBoard();
     turn = PLAYER; selected = null; legalForSelected = []; gameOver = false;
     setStatus("You go first.");
+    updatePlates();
     draw();
   });
   document.getElementById("hintBtn").addEventListener("click", (e) => {
@@ -413,6 +446,7 @@
     draw();
   });
 
+  updatePlates();
   draw();
 })();
 </script>
