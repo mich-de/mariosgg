@@ -76,6 +76,21 @@
   #fs[hidden] { display: none; }
   #fs.idle { opacity: 0; }
 
+  #kbBtn {
+    position: fixed; z-index: 20; bottom: 14px; right: 14px;
+    width: 48px; height: 48px; border-radius: 10px; border: none;
+    background: rgba(0,0,0,.45); color: #fff; font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    padding-bottom: env(safe-area-inset-bottom); padding-right: env(safe-area-inset-right);
+  }
+  #kbBtn[hidden] { display: none; }
+  /* Kept on-screen (not off-canvas) and real-sized so mobile browsers actually focus it and
+     raise the OS keyboard; font-size 16px avoids iOS Safari zooming the page in on focus. */
+  #kbInput {
+    position: fixed; z-index: -1; right: 0; bottom: 0; width: 1px; height: 1px;
+    font-size: 16px; opacity: 0; border: none; padding: 0;
+  }
+
   #rotateHint {
     position: fixed; z-index: 20; top: 10px; right: 10px;
     padding-top: env(safe-area-inset-top); padding-right: env(safe-area-inset-right);
@@ -96,6 +111,8 @@
 
 <button id="fs" hidden aria-label="Toggle full screen">⛶</button>
 <div id="rotateHint" hidden><span>↻ Rotate for full screen</span></div>
+<button id="kbBtn" hidden aria-label="Show keyboard">⌨</button>
+<input id="kbInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-hidden="true" tabindex="-1">
 
 <div id="launcher">
   <img id="hero" src="assets/hero.png" alt="Mario's Game Gallery running in the browser: Checkers, Go Fish, Dominoes, Backgammon and Yacht.">
@@ -114,6 +131,8 @@
   const jsdosEl = document.getElementById("jsdos");
   const touchEl = document.getElementById("touchCatcher");
   const fsBtn = document.getElementById("fs");
+  const kbBtn = document.getElementById("kbBtn");
+  const kbInput = document.getElementById("kbInput");
 
   const touch = matchMedia("(pointer: coarse)").matches;
   let gameCi = null;
@@ -173,6 +192,7 @@
     bindPointer();
     setupFullscreenButton();
     setupRotateHint();
+    setupKeyboardButton();
   }
 
   playBtn.addEventListener("click", start);
@@ -195,6 +215,12 @@
     return { x, y };
   }
 
+  // A fingertip wobbles by a pixel or two even holding still; resending motion for every
+  // one of those on touch makes the game's own cursor visibly flicker right under the finger.
+  // Below this normalized threshold (~1px on the 320-wide frame), skip the resend.
+  const TOUCH_DEADZONE = 1 / 320;
+  let lastSent = null;
+
   let pointerDown = false;
   function bindPointer() {
     touchEl.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -210,6 +236,7 @@
       gameCi.sendMouseMotion(x, y);
       gameCi.sendMouseButton(e.button === 2 ? 1 : 0, true);
       pointerDown = true;
+      lastSent = { x, y };
       e.preventDefault();
       e.stopPropagation();
     });
@@ -220,7 +247,14 @@
       // Touch/pen: there is no hover, so this only fires while a finger/pen is already down.
       if (!pointerDown && e.pointerType !== "mouse") return;
       const { x, y } = normPos(e.clientX, e.clientY);
+      if (e.pointerType !== "mouse" && lastSent &&
+          Math.abs(x - lastSent.x) < TOUCH_DEADZONE && Math.abs(y - lastSent.y) < TOUCH_DEADZONE) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       gameCi.sendMouseMotion(x, y);
+      lastSent = { x, y };
       e.preventDefault();
       e.stopPropagation();
     });
@@ -280,6 +314,42 @@
     addEventListener("orientationchange", updateRotateHint);
     document.addEventListener("fullscreenchange", updateRotateHint);
     updateRotateHint();
+  }
+
+  // ---------- on-screen keyboard ----------
+  // The game draws its own text-entry dialogs (e.g. "What is your name?") and reads real
+  // keystrokes; on desktop a physical keyboard already reaches it with no code here. On touch
+  // there is no physical keyboard, so a button focuses a real (but invisible) <input>, which is
+  // what makes the OS raise its on-screen keyboard, and every keystroke from it is translated
+  // into the DOS key the game expects instead of letting the browser type into the hidden input.
+  // GLFW key codes for letters/digits/space are their own uppercase ASCII codes, so a lowercase
+  // letter is just "send the key" (SDL yields lowercase with no shift held) and an uppercase one
+  // additionally holds left shift for that one press.
+  const KEY_BACKSPACE = 259, KEY_ENTER = 257, KEY_TAB = 258, KEY_LSHIFT = 340;
+  function sendChar(ch) {
+    if (/[a-z]/.test(ch)) {
+      gameCi.simulateKeyPress(ch.toUpperCase().charCodeAt(0));
+    } else if (/[A-Z]/.test(ch)) {
+      gameCi.sendKeyEvent(KEY_LSHIFT, true);
+      gameCi.simulateKeyPress(ch.charCodeAt(0));
+      gameCi.sendKeyEvent(KEY_LSHIFT, false);
+    } else if (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) < 127) {
+      gameCi.simulateKeyPress(ch.charCodeAt(0)); // digits/space/basic punctuation: GLFW matches ASCII here
+    }
+  }
+  function setupKeyboardButton() {
+    if (!touch) return;
+    kbBtn.hidden = false;
+    kbBtn.addEventListener("click", () => kbInput.focus());
+    kbInput.addEventListener("keydown", (e) => {
+      if (!gameCi) return;
+      if (e.key === "Backspace") gameCi.simulateKeyPress(KEY_BACKSPACE);
+      else if (e.key === "Enter") gameCi.simulateKeyPress(KEY_ENTER);
+      else if (e.key === "Tab") gameCi.simulateKeyPress(KEY_TAB);
+      else if (e.key.length === 1) sendChar(e.key);
+      else return;
+      e.preventDefault();
+    });
   }
 })();
 </script>
