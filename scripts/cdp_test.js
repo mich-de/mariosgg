@@ -4,7 +4,7 @@ const path = require('path');
 
 const URL = process.argv[2] || 'http://localhost:8099/index.html';
 const OUT = process.argv[3] || path.resolve(__dirname, '../screenshots');
-const CDP_PORT = 9333;
+const CDP_PORT = process.env.CDP_PORT || 9333;
 
 function rpc(ws, id, method, params, sessionId) {
   return new Promise((resolve) => {
