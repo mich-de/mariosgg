@@ -12,7 +12,14 @@
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-  #jsdos { position: fixed; inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; }
+  /* js-dos's own renderAspect option stretches to fill rather than letterboxing, so the
+     correct 320x200 (8/5) aspect ratio is enforced here in plain CSS instead: #stage centers
+     a box of the right shape, #jsdos (and js-dos's canvas inside it) just fills that box. */
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; background: #000; }
+  /* js-dos sets its own inline width/height/position on the element it mounts into, so the
+     correct 320x200 (8/5) box lives one level up, where js-dos never touches it. */
+  #box { width: min(100vw, 160vh); aspect-ratio: 320 / 200; }
+  #jsdos { touch-action: none; -webkit-user-select: none; user-select: none; }
 
   #launcher {
     position: fixed; inset: 0; z-index: 10;
@@ -60,14 +67,26 @@
   #fs[hidden] { display: none; }
   #fs.idle { opacity: 0; }
 
+  #rotateHint {
+    position: fixed; z-index: 20; top: 10px; right: 10px;
+    padding-top: env(safe-area-inset-top); padding-right: env(safe-area-inset-right);
+  }
+  #rotateHint span {
+    display: block; margin-top: 10px; padding: .5em .9em; border-radius: 8px;
+    background: #ffd34d; color: #1a2e0d; font: bold 13px/1.3 "Trebuchet MS", sans-serif;
+    box-shadow: 0 2px 10px rgba(0,0,0,.5);
+  }
+  #rotateHint[hidden] { display: none; }
+
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 </style>
 </head>
 <body>
 
-<div id="jsdos"></div>
+<div id="stage"><div id="box"><div id="jsdos"></div></div></div>
 
 <button id="fs" hidden aria-label="Toggle full screen">⛶</button>
+<div id="rotateHint" hidden><span>↻ Rotate for full screen</span></div>
 
 <div id="launcher">
   <img id="hero" src="assets/hero.png" alt="Mario's Game Gallery running in the browser: Checkers, Go Fish, Dominoes, Backgammon and Yacht.">
@@ -120,17 +139,13 @@
     started = true;
     launcher.classList.add("loading");
 
-    if (touch) {
-      const fs = document.documentElement.requestFullscreen?.({ navigationUI: "hide" });
-      (fs || Promise.reject()).then(() => screen.orientation?.lock?.("landscape")).catch(() => {});
-    }
+    if (touch) goFullscreen();
 
     freshBundleUrl().then((url) => Dos(jsdosEl, {
       url,
       pathPrefix: "js-dos/emulators/",
       autoStart: true,
       kiosk: true,
-      renderAspect: "Fit",
       onEvent: (e, ci) => {
         if (e !== "ci-ready" || !ci) return;
         gameCi = ci;
@@ -147,6 +162,7 @@
     launcher.inert = true;
     bindPointer();
     setupFullscreenButton();
+    setupRotateHint();
   }
 
   playBtn.addEventListener("click", start);
@@ -207,17 +223,17 @@
   }
 
   // ---------- full screen ----------
+  function goFullscreen() {
+    const fs = document.documentElement.requestFullscreen?.({ navigationUI: "hide" });
+    return (fs || Promise.reject()).then(() => screen.orientation?.lock?.("landscape")).catch(() => {});
+  }
+
   function setupFullscreenButton() {
     if (!document.fullscreenEnabled) return; // iPhone Safari: no element full screen
     fsBtn.hidden = false;
     fsBtn.addEventListener("click", () => {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
-      } else {
-        document.documentElement.requestFullscreen({ navigationUI: "hide" })
-          .then(() => (touch ? screen.orientation?.lock?.("landscape") : undefined))
-          .catch(() => {});
-      }
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else goFullscreen();
     });
     if (!touch) {
       let idleTimer = 0;
@@ -229,6 +245,24 @@
       addEventListener("mousemove", wake);
       wake();
     }
+  }
+
+  // ---------- rotate hint ----------
+  // Screen Orientation Lock has no effect on iPhone Safari (no element full screen there either,
+  // since requestFullscreen itself is unsupported), so touch players can get stuck in portrait
+  // with the 8/5 game boxed into a thin strip. Nudge them to rotate by hand in that case.
+  const rotateHint = document.getElementById("rotateHint");
+  function updateRotateHint() {
+    if (!touch) return;
+    rotateHint.hidden = document.fullscreenElement || innerWidth >= innerHeight;
+  }
+  function setupRotateHint() {
+    if (!touch) return;
+    rotateHint.addEventListener("click", goFullscreen);
+    addEventListener("resize", updateRotateHint);
+    addEventListener("orientationchange", updateRotateHint);
+    document.addEventListener("fullscreenchange", updateRotateHint);
+    updateRotateHint();
   }
 })();
 </script>
