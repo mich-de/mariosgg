@@ -199,6 +199,10 @@
   function bindPointer() {
     touchEl.addEventListener("contextmenu", (e) => e.preventDefault());
 
+    // stopPropagation (not just preventDefault) matters here: js-dos may have its own
+    // pointer/touch listeners higher up the tree (document/window level, for its unused
+    // mouse-capture overlay), and preventDefault alone does not stop bubbling to them. Two
+    // systems both reacting to the same touch is what an "unstable"/jittery cursor looks like.
     touchEl.addEventListener("pointerdown", (e) => {
       if (!gameCi) return;
       touchEl.setPointerCapture(e.pointerId);
@@ -207,6 +211,7 @@
       gameCi.sendMouseButton(e.button === 2 ? 1 : 0, true);
       pointerDown = true;
       e.preventDefault();
+      e.stopPropagation();
     });
 
     touchEl.addEventListener("pointermove", (e) => {
@@ -217,6 +222,7 @@
       const { x, y } = normPos(e.clientX, e.clientY);
       gameCi.sendMouseMotion(x, y);
       e.preventDefault();
+      e.stopPropagation();
     });
 
     const release = (e) => {
@@ -224,6 +230,7 @@
       pointerDown = false;
       gameCi.sendMouseButton(e.button === 2 ? 1 : 0, false);
       e.preventDefault();
+      e.stopPropagation();
     };
     touchEl.addEventListener("pointerup", release);
     touchEl.addEventListener("pointercancel", release);
