@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Checkers — Mario's Game Gallery (native pilot)</title>
+<meta name="description" content="Checkers reimplemented touch-first in HTML/Canvas, using piece art captured from the original 1995 Mario's Game Gallery — no DOS emulation.">
+<meta name="theme-color" content="#0b3d1f">
+<link rel="icon" href="assets/icon.png">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #04150a; color: #f4e9c9;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: .6rem;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  header { text-align: center; }
+  h1 { margin: .2rem 0; font-size: clamp(1rem, 4vw, 1.4rem); letter-spacing: .03em; }
+  p.sub { margin: 0; opacity: .7; font-size: clamp(.7rem, 2.5vw, .85rem); }
+  a.back { color: #ffd34d; text-decoration: none; }
+  a.back:hover { text-decoration: underline; }
+
+  #stage {
+    width: min(92vw, 70vh, 480px);
+    aspect-ratio: 1 / 1;
+    position: relative;
+    touch-action: none;
+  }
+  #board {
+    width: 100%; height: 100%; display: block;
+    image-rendering: pixelated;
+    border: 4px solid #8a5a1e; border-radius: 4px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.6);
+  }
+
+  #status {
+    min-height: 1.6em;
+    font-size: clamp(.9rem, 3vw, 1.1rem);
+    font-weight: bold;
+    text-align: center;
+    color: #ffd34d;
+  }
+
+  #controls { display: flex; gap: .6rem; }
+  button.pill {
+    font: inherit; font-weight: bold; font-size: .85rem;
+    padding: .55em 1.4em; border-radius: 999px; border: none;
+    background: #ffd34d; color: #1a2e0d; cursor: pointer;
+    box-shadow: 0 4px 0 #b8861a;
+  }
+  button.pill:active { transform: translateY(3px); box-shadow: 0 1px 0 #b8861a; }
+  button.pill.ghost { background: transparent; color: #f4e9c9; border: 2px solid #f4e9c9; box-shadow: none; }
+
+  .legend { display: flex; gap: 1.2rem; font-size: .75rem; opacity: .8; align-items: center; }
+  .legend span { display: inline-flex; align-items: center; gap: .35em; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CHECKERS</h1>
+  <p class="sub">Native pilot — no DOS emulation, piece art captured from the original game. <a class="back" href="index.html">← back to the gallery</a></p>
+</header>
+
+<div id="stage">
+  <canvas id="board" width="320" height="320"></canvas>
+</div>
+
+<div id="status">You go first.</div>
+
+<div class="legend">
+  <span><span class="swatch" style="background:#4a8a3a"></span> You (Yoshi)</span>
+  <span><span class="swatch" style="background:#c8551a"></span> Mario (Koopa)</span>
+</div>
+
+<div id="controls">
+  <button class="pill" id="newGameBtn" type="button">New game</button>
+  <button class="pill ghost" id="hintBtn" type="button">Show legal moves</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- rules engine ----------
+  // Standard American checkers / English draughts: 8x8, only dark squares play,
+  // forward single-step moves, mandatory captures (longest-chain not required,
+  // just "a capture must be taken"), multi-jump continuation with the same piece,
+  // kinged on reaching the far row, kings move/capture in all four diagonals.
+  const SIZE = 8;
+  const PLAYER = "player", AI = "ai";
+
+  function emptyBoard() {
+    return Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+  }
+  function initialBoard() {
+    const b = emptyBoard();
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if ((r + c) % 2 !== 1) continue; // only dark squares
+        if (r < 3) b[r][c] = { side: AI, king: false };
+        else if (r > 4) b[r][c] = { side: PLAYER, king: false };
+      }
+    }
+    return b;
+  }
+  const inBounds = (r, c) => r >= 0 && r < SIZE && c >= 0 && c < SIZE;
+
+  function pieceMoves(board, r, c, capturesOnly) {
+    const cell = board[r][c];
+    if (!cell) return [];
+    const dirs = cell.king
+      ? [[-1, -1], [-1, 1], [1, -1], [1, 1]]
+      : cell.side === PLAYER ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
+    const moves = [];
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr, nc = c + dc;
+      if (!inBounds(nr, nc)) continue;
+      if (!board[nr][nc]) {
+        if (!capturesOnly) moves.push({ type: "move", from: [r, c], to: [nr, nc] });
+      } else if (board[nr][nc].side !== cell.side) {
+        const jr = r + 2 * dr, jc = c + 2 * dc;
+        if (inBounds(jr, jc) && !board[jr][jc]) {
+          moves.push({ type: "capture", from: [r, c], to: [jr, jc], captured: [nr, nc] });
+        }
+      }
+    }
+    return moves;
+  }
+
+  function allMoves(board, side) {
+    const captures = [], simples = [];
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if (board[r][c]?.side !== side) continue;
+        for (const m of pieceMoves(board, r, c, false)) {
+          (m.type === "capture" ? captures : simples).push(m);
+        }
+      }
+    }
+    return captures.length ? captures : simples;
+  }
+
+  function applyMove(board, move) {
+    const [fr, fc] = move.from, [tr, tc] = move.to;
+    const cell = board[fr][fc];
+    board[fr][fc] = null;
+    if (move.type === "capture") board[move.captured[0]][move.captured[1]] = null;
+    const kinged = !cell.king && ((cell.side === PLAYER && tr === 0) || (cell.side === AI && tr === SIZE - 1));
+    board[tr][tc] = { side: cell.side, king: cell.king || kinged };
+    return kinged;
+  }
+
+  // ---------- state ----------
+  let board = initialBoard();
+  let turn = PLAYER;
+  let selected = null;        // [r,c] of the currently selected piece
+  let legalForSelected = [];  // moves available from `selected`
+  let chainPiece = null;      // [r,c] forced to keep jumping, or null
+  let gameOver = false;
+  let showHints = false;
+
+  const canvas = document.getElementById("board");
+  const ctx = canvas.getContext("2d");
+  const statusEl = document.getElementById("status");
+  const SQ = canvas.width / SIZE;
+
+  const koopaImg = new Image(); koopaImg.src = "assets/pieces/koopa.png";
+  const yoshiImg = new Image(); yoshiImg.src = "assets/pieces/yoshi.png";
+  let imagesReady = 0;
+  [koopaImg, yoshiImg].forEach((img) => { img.onload = () => { imagesReady++; draw(); }; });
+
+  const DARK = "#7a1010", LIGHT = "#1a1a1a", EDGE = "#3a0a0a";
+
+  function squaresWithMoves(side) {
+    const moves = allMoves(board, side);
+    const set = new Set(moves.map((m) => m.from.join(",")));
+    return { moves, set };
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        ctx.fillStyle = (r + c) % 2 === 1 ? DARK : LIGHT;
+        ctx.fillRect(c * SQ, r * SQ, SQ, SQ);
+      }
+    }
+    ctx.strokeStyle = EDGE;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+    // movable-piece indicator (dim overlay on everything else when it's the player's turn
+    // and a mandatory capture restricts which pieces may move)
+    if (!gameOver && turn === PLAYER) {
+      const { set } = squaresWithMoves(PLAYER);
+      if (selected === null) {
+        for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+          if (board[r][c]?.side === PLAYER && set.has(r + "," + c)) {
+            ctx.fillStyle = "rgba(255,211,77,.25)";
+            ctx.fillRect(c * SQ + 2, r * SQ + 2, SQ - 4, SQ - 4);
+          }
+        }
+      }
+    }
+
+    // legal destination highlights for the selected piece
+    if (selected) {
+      ctx.fillStyle = "rgba(255,211,77,.4)";
+      for (const m of legalForSelected) {
+        const [tr, tc] = m.to;
+        ctx.beginPath();
+        ctx.arc(tc * SQ + SQ / 2, tr * SQ + SQ / 2, SQ * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = "#ffd34d";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(selected[1] * SQ + 2, selected[0] * SQ + 2, SQ - 4, SQ - 4);
+    }
+
+    // all legal moves (debug / "show legal moves" toggle), for whichever side is to move
+    if (showHints && !gameOver) {
+      const { moves } = squaresWithMoves(turn);
+      ctx.fillStyle = "rgba(255,255,255,.35)";
+      for (const m of moves) {
+        ctx.beginPath();
+        ctx.arc(m.to[1] * SQ + SQ / 2, m.to[0] * SQ + SQ / 2, SQ * 0.08, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (imagesReady === 2) {
+      for (let r = 0; r < SIZE; r++) {
+        for (let c = 0; c < SIZE; c++) {
+          const cell = board[r][c];
+          if (!cell) continue;
+          drawPiece(cell, r, c);
+        }
+      }
+    }
+  }
+
+  function drawPiece(cell, r, c) {
+    const img = cell.side === PLAYER ? yoshiImg : koopaImg;
+    const maxH = SQ * 0.92;
+    const scale = maxH / img.naturalHeight;
+    const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+    const cx = c * SQ + SQ / 2, bottomY = r * SQ + SQ - SQ * 0.04;
+    ctx.drawImage(img, cx - w / 2, bottomY - h, w, h);
+    if (cell.king) {
+      ctx.fillStyle = "#ffd34d";
+      ctx.strokeStyle = "#7a4a00";
+      ctx.lineWidth = 1;
+      const starX = cx, starY = r * SQ + SQ * 0.18, rOuter = SQ * 0.11, rInner = SQ * 0.045;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const ang = (Math.PI / 5) * i - Math.PI / 2;
+        const rad = i % 2 === 0 ? rOuter : rInner;
+        const x = starX + Math.cos(ang) * rad, y = starY + Math.sin(ang) * rad;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // ---------- turn flow ----------
+  function setStatus(text) { statusEl.textContent = text; }
+
+  function countSide(side) {
+    let n = 0;
+    for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (board[r][c]?.side === side) n++;
+    return n;
+  }
+
+  function checkGameOver() {
+    for (const side of [PLAYER, AI]) {
+      if (countSide(side) === 0 || allMoves(board, side).length === 0) {
+        gameOver = true;
+        setStatus(side === PLAYER ? "Mario wins! Tap New game to play again." : "You win! Tap New game to play again.");
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function startAiTurn() {
+    turn = AI;
+    selected = null; legalForSelected = [];
+    draw();
+    setStatus("Mario is thinking...");
+    setTimeout(aiStep, 650);
+  }
+
+  function aiStep(forcedPiece) {
+    if (gameOver) return;
+    let moves = forcedPiece
+      ? pieceMoves(board, forcedPiece[0], forcedPiece[1], true)
+      : allMoves(board, AI);
+    if (moves.length === 0) { finishAiTurn(); return; }
+
+    let move;
+    const captures = moves.filter((m) => m.type === "capture");
+    if (captures.length) {
+      move = captures[Math.floor(Math.random() * captures.length)];
+    } else {
+      // Prefer a move that does not immediately hang the piece to a player capture.
+      const safe = moves.filter((m) => !hangsPiece(board, m));
+      const pool = safe.length ? safe : moves;
+      move = pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    const kinged = applyMove(board, move);
+    draw();
+
+    if (move.type === "capture" && !kinged) {
+      const more = pieceMoves(board, move.to[0], move.to[1], true);
+      if (more.length) { setTimeout(() => aiStep(move.to), 450); return; }
+    }
+    finishAiTurn();
+  }
+
+  function finishAiTurn() {
+    if (checkGameOver()) { draw(); return; }
+    turn = PLAYER;
+    setStatus("Your turn.");
+    draw();
+  }
+
+  function hangsPiece(testBoard, move) {
+    const b2 = testBoard.map((row) => row.slice());
+    applyMove(b2, move);
+    const opp = allMoves(b2, PLAYER).filter((m) => m.type === "capture");
+    return opp.some((m) => m.captured[0] === move.to[0] && m.captured[1] === move.to[1]);
+  }
+
+  // ---------- player input ----------
+  function squareAt(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (clientX - rect.left) / rect.width * canvas.width;
+    const y = (clientY - rect.top) / rect.height * canvas.height;
+    const c = Math.floor(x / SQ), r = Math.floor(y / SQ);
+    return inBounds(r, c) ? [r, c] : null;
+  }
+
+  function onTap(r, c) {
+    if (gameOver || turn !== PLAYER) return;
+
+    if (selected) {
+      const mv = legalForSelected.find((m) => m.to[0] === r && m.to[1] === c);
+      if (mv) {
+        const kinged = applyMove(board, mv);
+        if (mv.type === "capture" && !kinged) {
+          const more = pieceMoves(board, r, c, true);
+          if (more.length) {
+            selected = [r, c];
+            legalForSelected = more;
+            setStatus("Jump again!");
+            draw();
+            return;
+          }
+        }
+        selected = null; legalForSelected = [];
+        if (checkGameOver()) { draw(); return; }
+        startAiTurn();
+        return;
+      }
+    }
+
+    // select a piece (respecting mandatory capture: only capturing pieces selectable if any exist)
+    const cell = board[r][c];
+    if (cell?.side === PLAYER) {
+      const { moves } = squaresWithMoves(PLAYER);
+      const mine = moves.filter((m) => m.from[0] === r && m.from[1] === c);
+      if (mine.length) {
+        selected = [r, c];
+        legalForSelected = mine;
+        setStatus(mine[0].type === "capture" ? "Capture available — tap a highlighted square." : "Tap a highlighted square to move.");
+      } else {
+        selected = null; legalForSelected = [];
+        setStatus("That piece has no legal move — a capture is mandatory elsewhere.");
+      }
+    } else {
+      selected = null; legalForSelected = [];
+    }
+    draw();
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    const sq = squareAt(e.clientX, e.clientY);
+    if (sq) onTap(sq[0], sq[1]);
+  });
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  document.getElementById("newGameBtn").addEventListener("click", () => {
+    board = initialBoard();
+    turn = PLAYER; selected = null; legalForSelected = []; gameOver = false;
+    setStatus("You go first.");
+    draw();
+  });
+  document.getElementById("hintBtn").addEventListener("click", (e) => {
+    showHints = !showHints;
+    e.target.textContent = showHints ? "Hide legal moves" : "Show legal moves";
+    draw();
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>
