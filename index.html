@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Mario's Game Gallery — Play in your browser</title>
+<meta name="description" content="Play Mario's Game Gallery (Presage/Interplay, 1995) directly in your browser on desktop or mobile, powered by js-dos and DOSBox.">
+<meta name="theme-color" content="#0b3d1f">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="js-dos/js-dos.css">
+<script src="js-dos/js-dos.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+  #jsdos { position: fixed; inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; }
+
+  #launcher {
+    position: fixed; inset: 0; z-index: 10;
+    display: grid; place-items: center; gap: 1.25rem;
+    background: radial-gradient(ellipse at center, #163a1c 0%, #04150a 75%);
+    color: #f4e9c9;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    text-align: center;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    transition: opacity .4s ease, visibility 0s .4s;
+  }
+  #launcher.off { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  #hero {
+    width: min(80vw, 480px);
+    image-rendering: pixelated;
+    border: 4px solid #f4e9c9;
+    border-radius: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  h1 { font-size: clamp(1.1rem, 4vw, 1.8rem); margin: .25rem 0 0; letter-spacing: .03em; }
+  p.sub { margin: 0; opacity: .75; font-size: clamp(.8rem, 2.5vw, 1rem); max-width: 32em; }
+
+  #playBtn {
+    font: inherit; font-weight: bold; font-size: clamp(1rem, 3vw, 1.3rem);
+    padding: .75em 2.2em;
+    color: #1a2e0d; background: #ffd34d; border: none; border-radius: 999px;
+    cursor: pointer; letter-spacing: .05em;
+    box-shadow: 0 6px 0 #b8861a, 0 10px 18px rgba(0,0,0,.5);
+  }
+  #playBtn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b8861a, 0 4px 10px rgba(0,0,0,.5); }
+
+  #loading { display: none; opacity: .85; font-size: .95rem; }
+  #launcher.loading #playBtn { display: none; }
+  #launcher.loading #loading { display: block; }
+
+  #fs {
+    position: fixed; z-index: 20; top: 10px; left: 10px;
+    width: 40px; height: 40px; border-radius: 8px; border: none;
+    background: rgba(0,0,0,.45); color: #fff; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left);
+    transition: opacity .3s;
+  }
+  #fs[hidden] { display: none; }
+  #fs.idle { opacity: 0; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+</style>
+</head>
+<body>
+
+<div id="jsdos"></div>
+
+<button id="fs" hidden aria-label="Toggle full screen">⛶</button>
+
+<div id="launcher">
+  <img id="hero" src="assets/hero.png" alt="Mario's Game Gallery running in the browser: Checkers, Go Fish, Dominoes, Backgammon and Yacht.">
+  <h1>MARIO'S GAME GALLERY</h1>
+  <p class="sub">Checkers · Go Fish · Dominoes · Backgammon · Yacht — 1995, running live via js-dos.<br>Tap or click anywhere on screen to move Mario's hand and play.</p>
+  <button id="playBtn" type="button">▶ PLAY</button>
+  <p id="loading">Loading…</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const launcher = document.getElementById("launcher");
+  const playBtn = document.getElementById("playBtn");
+  const jsdosEl = document.getElementById("jsdos");
+  const fsBtn = document.getElementById("fs");
+
+  const touch = matchMedia("(pointer: coarse)").matches;
+  let gameCi = null;
+  let started = false;
+  let revealed = false;
+
+  // ---------- bundle loading ----------
+  // js-dos caches every downloaded bundle forever in OPFS, keyed by URL, and never revalidates it.
+  // Versioning the URL with the server's ETag gives each new bundle a new cache key, and stale
+  // copies for this bundle name are removed so they do not pile up across deploys.
+  const BUNDLE = "mariosgg.jsdos";
+  async function freshBundleUrl() {
+    let url = BUNDLE;
+    try {
+      const r = await fetch(BUNDLE, { method: "HEAD", cache: "no-cache" });
+      const v = (r.headers.get("ETag") || r.headers.get("Last-Modified") || "").replace(/[^A-Za-z0-9]/g, "");
+      if (r.ok && v) url = BUNDLE + "?v=" + v;
+    } catch {}
+    try {
+      const key = url.replace(/[^a-zA-Z0-9._-]/g, "_");
+      let dir = await navigator.storage.getDirectory();
+      for (const name of ["jsdos", "caches", "bundles"]) dir = await dir.getDirectoryHandle(name);
+      const stale = [];
+      for await (const name of dir.keys()) if (name.startsWith(BUNDLE) && name !== key) stale.push(name);
+      for (const name of stale) await dir.removeEntry(name);
+    } catch {}
+    return url;
+  }
+
+  // ---------- start ----------
+  function start() {
+    if (started) return;
+    started = true;
+    launcher.classList.add("loading");
+
+    if (touch) {
+      const fs = document.documentElement.requestFullscreen?.({ navigationUI: "hide" });
+      (fs || Promise.reject()).then(() => screen.orientation?.lock?.("landscape")).catch(() => {});
+    }
+
+    freshBundleUrl().then((url) => Dos(jsdosEl, {
+      url,
+      pathPrefix: "js-dos/emulators/",
+      autoStart: true,
+      kiosk: true,
+      renderAspect: "Fit",
+      onEvent: (e, ci) => {
+        if (e !== "ci-ready" || !ci) return;
+        gameCi = ci;
+        setTimeout(reveal, 1200);
+      },
+    }));
+    setTimeout(reveal, 20000);
+  }
+
+  function reveal() {
+    if (revealed) return;
+    revealed = true;
+    launcher.classList.add("off");
+    launcher.inert = true;
+    bindPointer();
+    setupFullscreenButton();
+  }
+
+  playBtn.addEventListener("click", start);
+
+  // ---------- point & click: bridge pointer/touch input to the DOS mouse ----------
+  // js-dos's own absolute-position mapping (canvas rect -> emulator frame, letterboxed), reused
+  // here directly against the DOS mouse API instead of js-dos's built-in capture/overlay, so the
+  // very same code path drives a hovering desktop mouse and a tapping/dragging touch screen.
+  function normPos(clientX, clientY) {
+    const rect = jsdosEl.getBoundingClientRect();
+    const px = clientX - rect.left, py = clientY - rect.top;
+    const frameW = gameCi.width(), frameH = gameCi.height();
+    const boxW = rect.width, boxH = rect.height;
+    const frameAspect = frameW / frameH;
+    let fitW = boxW, fitH = boxW / frameAspect;
+    if (fitH > boxH) { fitH = boxH; fitW = boxH * frameAspect; }
+    const offY = (boxH - fitH) / 2, offX = (boxW - fitW) / 2;
+    const x = Math.max(0, Math.min(1, (px - offX) / fitW));
+    const y = Math.max(0, Math.min(1, (py - offY) / fitH));
+    return { x, y };
+  }
+
+  let pointerDown = false;
+  function bindPointer() {
+    jsdosEl.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    jsdosEl.addEventListener("pointerdown", (e) => {
+      if (!gameCi) return;
+      jsdosEl.setPointerCapture(e.pointerId);
+      const { x, y } = normPos(e.clientX, e.clientY);
+      gameCi.sendMouseMotion(x, y);
+      gameCi.sendMouseButton(e.button === 2 ? 1 : 0, true);
+      pointerDown = true;
+      e.preventDefault();
+    });
+
+    jsdosEl.addEventListener("pointermove", (e) => {
+      if (!gameCi) return;
+      // Desktop: track hover even with no button down, so the in-game cursor follows the mouse.
+      // Touch/pen: there is no hover, so this only fires while a finger/pen is already down.
+      if (!pointerDown && e.pointerType !== "mouse") return;
+      const { x, y } = normPos(e.clientX, e.clientY);
+      gameCi.sendMouseMotion(x, y);
+      e.preventDefault();
+    });
+
+    const release = (e) => {
+      if (!gameCi || !pointerDown) return;
+      pointerDown = false;
+      gameCi.sendMouseButton(e.button === 2 ? 1 : 0, false);
+      e.preventDefault();
+    };
+    jsdosEl.addEventListener("pointerup", release);
+    jsdosEl.addEventListener("pointercancel", release);
+    addEventListener("blur", () => {
+      if (pointerDown && gameCi) { gameCi.sendMouseButton(0, false); pointerDown = false; }
+    });
+  }
+
+  // ---------- full screen ----------
+  function setupFullscreenButton() {
+    if (!document.fullscreenEnabled) return; // iPhone Safari: no element full screen
+    fsBtn.hidden = false;
+    fsBtn.addEventListener("click", () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else {
+        document.documentElement.requestFullscreen({ navigationUI: "hide" })
+          .then(() => (touch ? screen.orientation?.lock?.("landscape") : undefined))
+          .catch(() => {});
+      }
+    });
+    if (!touch) {
+      let idleTimer = 0;
+      const wake = () => {
+        fsBtn.classList.remove("idle");
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => fsBtn.classList.add("idle"), 2500);
+      };
+      addEventListener("mousemove", wake);
+      wake();
+    }
+  }
+})();
+</script>
+</body>
+</html>

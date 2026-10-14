@@ -1,0 +1,4 @@
+node_modules/
+_source/
+_bundle_staging/
+screenshots/*.ppm
