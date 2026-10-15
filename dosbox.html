@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Mario's Game Gallery — Play in your browser</title>
+<meta name="description" content="Play Mario's Game Gallery (Presage/Interplay, 1995) directly in your browser on desktop or mobile, powered by js-dos and DOSBox.">
+<meta name="theme-color" content="#0b3d1f">
+<link rel="icon" href="assets/icon.png">
+<link rel="stylesheet" href="js-dos/js-dos.css">
+<script src="js-dos/js-dos.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+  /* js-dos's own renderAspect option stretches to fill rather than letterboxing, so the
+     correct 320x200 (8/5) aspect ratio is enforced here in plain CSS instead: #stage centers
+     a box of the right shape, #jsdos (and js-dos's canvas inside it) just fills that box. */
+  #stage { position: fixed; inset: 0; display: grid; place-items: center; background: #000; }
+  /* js-dos sets its own inline width/height/position on the element it mounts into, so the
+     correct 320x200 (8/5) box lives one level up, where js-dos never touches it. */
+  #box { position: relative; width: min(100vw, 160vh); aspect-ratio: 320 / 200; }
+  #jsdos { position: absolute; inset: 0; }
+  /* js-dos attaches its own pointer/touch listeners straight to its canvas (for a mouse-capture
+     overlay this page doesn't use), which raced with this page's own listeners on #jsdos itself
+     and could win, leaving the in-game cursor not following a real finger. A transparent catcher
+     on top gets every pointer event first, before js-dos's own canvas ever sees it. */
+  #touchCatcher {
+    position: absolute; inset: 0; z-index: 5;
+    touch-action: none; -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+
+  #launcher {
+    position: fixed; inset: 0; z-index: 10;
+    display: grid; place-items: center; gap: 1.25rem;
+    background: radial-gradient(ellipse at center, #163a1c 0%, #04150a 75%);
+    color: #f4e9c9;
+    font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    text-align: center;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    transition: opacity .4s ease, visibility 0s .4s;
+  }
+  #launcher.off { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  #hero {
+    width: min(80vw, 480px);
+    image-rendering: pixelated;
+    border: 4px solid #f4e9c9;
+    border-radius: 6px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  }
+  h1 { font-size: clamp(1.1rem, 4vw, 1.8rem); margin: .25rem 0 0; letter-spacing: .03em; }
+  p.sub { margin: 0; opacity: .75; font-size: clamp(.8rem, 2.5vw, 1rem); max-width: 32em; }
+
+  #playBtn {
+    font: inherit; font-weight: bold; font-size: clamp(1rem, 3vw, 1.3rem);
+    padding: .75em 2.2em;
+    color: #1a2e0d; background: #ffd34d; border: none; border-radius: 999px;
+    cursor: pointer; letter-spacing: .05em;
+    box-shadow: 0 6px 0 #b8861a, 0 10px 18px rgba(0,0,0,.5);
+  }
+  #playBtn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b8861a, 0 4px 10px rgba(0,0,0,.5); }
+
+  #loading { display: none; opacity: .85; font-size: .95rem; }
+  #launcher.loading #playBtn { display: none; }
+  #launcher.loading #loading { display: block; }
+
+  #fs {
+    position: fixed; z-index: 20; top: 10px; left: 10px;
+    width: 40px; height: 40px; border-radius: 8px; border: none;
+    background: rgba(0,0,0,.45); color: #fff; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left);
+    transition: opacity .3s;
+  }
+  #fs[hidden] { display: none; }
+  #fs.idle { opacity: 0; }
+
+  #kbBtn {
+    position: fixed; z-index: 20; bottom: 14px; right: 14px;
+    width: 48px; height: 48px; border-radius: 10px; border: none;
+    background: rgba(0,0,0,.45); color: #fff; font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    padding-bottom: env(safe-area-inset-bottom); padding-right: env(safe-area-inset-right);
+  }
+  #kbBtn[hidden] { display: none; }
+  /* Kept on-screen (not off-canvas) and real-sized so mobile browsers actually focus it and
+     raise the OS keyboard; font-size 16px avoids iOS Safari zooming the page in on focus. */
+  #kbInput {
+    position: fixed; z-index: -1; right: 0; bottom: 0; width: 1px; height: 1px;
+    font-size: 16px; opacity: 0; border: none; padding: 0;
+  }
+
+  #rotateHint {
+    position: fixed; z-index: 20; top: 10px; right: 10px;
+    padding-top: env(safe-area-inset-top); padding-right: env(safe-area-inset-right);
+  }
+  #rotateHint span {
+    display: block; margin-top: 10px; padding: .5em .9em; border-radius: 8px;
+    background: #ffd34d; color: #1a2e0d; font: bold 13px/1.3 "Trebuchet MS", sans-serif;
+    box-shadow: 0 2px 10px rgba(0,0,0,.5);
+  }
+  #rotateHint[hidden] { display: none; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+</style>
+</head>
+<body>
+
+<div id="stage"><div id="box"><div id="jsdos"></div><div id="touchCatcher"></div></div></div>
+
+<button id="fs" hidden aria-label="Toggle full screen">⛶</button>
+<div id="rotateHint" hidden><span>↻ Rotate for full screen</span></div>
+<button id="kbBtn" hidden aria-label="Show keyboard">⌨</button>
+<input id="kbInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-hidden="true" tabindex="-1">
+
+<div id="launcher">
+  <img id="hero" src="assets/hero.png" alt="Mario's Game Gallery running in the browser: Checkers, Go Fish, Dominoes, Backgammon and Yacht.">
+  <h1>MARIO'S GAME GALLERY</h1>
+  <p class="sub">Checkers · Go Fish · Dominoes · Backgammon · Yacht — 1995, running live via js-dos.<br>Tap or click anywhere on screen to move Mario's hand and play.</p>
+  <button id="playBtn" type="button">▶ PLAY</button>
+  <p id="loading">Loading…</p>
+  <p class="sub"><a href="checkers.html" style="color:#ffd34d">Pilot: Checkers rebuilt touch-native, no emulation →</a></p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const launcher = document.getElementById("launcher");
+  const playBtn = document.getElementById("playBtn");
+  const jsdosEl = document.getElementById("jsdos");
+  const touchEl = document.getElementById("touchCatcher");
+  const fsBtn = document.getElementById("fs");
+  const kbBtn = document.getElementById("kbBtn");
+  const kbInput = document.getElementById("kbInput");
+
+  const touch = matchMedia("(pointer: coarse)").matches;
+  let gameCi = null;
+  let started = false;
+  let revealed = false;
+
+  // ---------- bundle loading ----------
+  // js-dos caches every downloaded bundle forever in OPFS, keyed by URL, and never revalidates it.
+  // Versioning the URL with the server's ETag gives each new bundle a new cache key, and stale
+  // copies for this bundle name are removed so they do not pile up across deploys.
+  const BUNDLE = "mariosgg.jsdos";
+  async function freshBundleUrl() {
+    let url = BUNDLE;
+    try {
+      const r = await fetch(BUNDLE, { method: "HEAD", cache: "no-cache" });
+      const v = (r.headers.get("ETag") || r.headers.get("Last-Modified") || "").replace(/[^A-Za-z0-9]/g, "");
+      if (r.ok && v) url = BUNDLE + "?v=" + v;
+    } catch {}
+    try {
+      const key = url.replace(/[^a-zA-Z0-9._-]/g, "_");
+      let dir = await navigator.storage.getDirectory();
+      for (const name of ["jsdos", "caches", "bundles"]) dir = await dir.getDirectoryHandle(name);
+      const stale = [];
+      for await (const name of dir.keys()) if (name.startsWith(BUNDLE) && name !== key) stale.push(name);
+      for (const name of stale) await dir.removeEntry(name);
+    } catch {}
+    return url;
+  }
+
+  // ---------- start ----------
+  function start() {
+    if (started) return;
+    started = true;
+    launcher.classList.add("loading");
+
+    if (touch) goFullscreen();
+
+    freshBundleUrl().then((url) => Dos(jsdosEl, {
+      url,
+      pathPrefix: "js-dos/emulators/",
+      autoStart: true,
+      kiosk: true,
+      onEvent: (e, ci) => {
+        if (e !== "ci-ready" || !ci) return;
+        gameCi = ci;
+        setTimeout(reveal, 1200);
+      },
+    }));
+    setTimeout(reveal, 20000);
+  }
+
+  function reveal() {
+    if (revealed) return;
+    revealed = true;
+    launcher.classList.add("off");
+    launcher.inert = true;
+    bindPointer();
+    setupFullscreenButton();
+    setupRotateHint();
+    setupKeyboardButton();
+  }
+
+  playBtn.addEventListener("click", start);
+
+  // ---------- point & click: bridge pointer/touch input to the DOS mouse ----------
+  // js-dos's own absolute-position mapping (canvas rect -> emulator frame, letterboxed), reused
+  // here directly against the DOS mouse API instead of js-dos's built-in capture/overlay, so the
+  // very same code path drives a hovering desktop mouse and a tapping/dragging touch screen.
+  function normPos(clientX, clientY) {
+    const rect = touchEl.getBoundingClientRect();
+    const px = clientX - rect.left, py = clientY - rect.top;
+    const frameW = gameCi.width(), frameH = gameCi.height();
+    const boxW = rect.width, boxH = rect.height;
+    const frameAspect = frameW / frameH;
+    let fitW = boxW, fitH = boxW / frameAspect;
+    if (fitH > boxH) { fitH = boxH; fitW = boxH * frameAspect; }
+    const offY = (boxH - fitH) / 2, offX = (boxW - fitW) / 2;
+    const x = Math.max(0, Math.min(1, (px - offX) / fitW));
+    const y = Math.max(0, Math.min(1, (py - offY) / fitH));
+    return { x, y };
+  }
+
+  // A fingertip wobbles by a pixel or two even holding still; resending motion for every
+  // one of those on touch makes the game's own cursor visibly flicker right under the finger.
+  // Below this normalized threshold (~1px on the 320-wide frame), skip the resend.
+  const TOUCH_DEADZONE = 1 / 320;
+  let lastSent = null;
+
+  // ---------- main menu: keyboard access-keys, not the mouse ----------
+  // Confirmed interactively (CDP): the title screen's game list does not respond to mouse
+  // clicks at all (verified with motion+button in many combinations, both buttons, held,
+  // repeated) — only the underlined access-key letters (C/G/D/B/Y) move the selection, and
+  // pressing the SAME letter again is what actually enters that game (a single press only
+  // highlights the row; it does not open it, even after a long wait). Row boundaries below are
+  // exact pixel-measured black-separator positions in the native 320x200 frame (not guessed).
+  const MENU_ROWS = [
+    { yMin: 77 / 200, yMax: 92 / 200, letter: 67 },  // Checkers
+    { yMin: 92 / 200, yMax: 107 / 200, letter: 71 }, // Go Fish
+    { yMin: 107 / 200, yMax: 122 / 200, letter: 68 }, // Dominoes
+    { yMin: 122 / 200, yMax: 137 / 200, letter: 66 }, // Backgammon
+    { yMin: 137 / 200, yMax: 152 / 200, letter: 89 }, // Yacht
+  ];
+  const MENU_X_MIN = 50 / 320, MENU_X_MAX = 150 / 320;
+  function menuRowAt(x, y) {
+    if (x < MENU_X_MIN || x > MENU_X_MAX) return null;
+    return MENU_ROWS.find((r) => y >= r.yMin && y < r.yMax) || null;
+  }
+
+  let pointerDown = false;
+  function bindPointer() {
+    touchEl.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    // stopPropagation (not just preventDefault) matters here: js-dos may have its own
+    // pointer/touch listeners higher up the tree (document/window level, for its unused
+    // mouse-capture overlay), and preventDefault alone does not stop bubbling to them. Two
+    // systems both reacting to the same touch is what an "unstable"/jittery cursor looks like.
+    touchEl.addEventListener("pointerdown", (e) => {
+      if (!gameCi) return;
+      touchEl.setPointerCapture(e.pointerId);
+      const { x, y } = normPos(e.clientX, e.clientY);
+      const row = menuRowAt(x, y);
+      if (row) {
+        // First press selects the row, second press (shortly after) opens it.
+        gameCi.simulateKeyPress(row.letter);
+        setTimeout(() => gameCi && gameCi.simulateKeyPress(257 /* Enter */), 700);
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      gameCi.sendMouseMotion(x, y);
+      gameCi.sendMouseButton(e.button === 2 ? 1 : 0, true);
+      pointerDown = true;
+      lastSent = { x, y };
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    touchEl.addEventListener("pointermove", (e) => {
+      if (!gameCi) return;
+      // Desktop: track hover even with no button down, so the in-game cursor follows the mouse.
+      // Touch/pen: there is no hover, so this only fires while a finger/pen is already down.
+      if (!pointerDown && e.pointerType !== "mouse") return;
+      const { x, y } = normPos(e.clientX, e.clientY);
+      if (e.pointerType !== "mouse" && lastSent &&
+          Math.abs(x - lastSent.x) < TOUCH_DEADZONE && Math.abs(y - lastSent.y) < TOUCH_DEADZONE) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      gameCi.sendMouseMotion(x, y);
+      lastSent = { x, y };
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    const release = (e) => {
+      if (!gameCi || !pointerDown) return;
+      pointerDown = false;
+      gameCi.sendMouseButton(e.button === 2 ? 1 : 0, false);
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    touchEl.addEventListener("pointerup", release);
+    touchEl.addEventListener("pointercancel", release);
+    addEventListener("blur", () => {
+      if (pointerDown && gameCi) { gameCi.sendMouseButton(0, false); pointerDown = false; }
+    });
+  }
+
+  // ---------- full screen ----------
+  function goFullscreen() {
+    const fs = document.documentElement.requestFullscreen?.({ navigationUI: "hide" });
+    return (fs || Promise.reject()).then(() => screen.orientation?.lock?.("landscape")).catch(() => {});
+  }
+
+  function setupFullscreenButton() {
+    if (!document.fullscreenEnabled) return; // iPhone Safari: no element full screen
+    fsBtn.hidden = false;
+    fsBtn.addEventListener("click", () => {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else goFullscreen();
+    });
+    if (!touch) {
+      let idleTimer = 0;
+      const wake = () => {
+        fsBtn.classList.remove("idle");
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => fsBtn.classList.add("idle"), 2500);
+      };
+      addEventListener("mousemove", wake);
+      wake();
+    }
+  }
+
+  // ---------- rotate hint ----------
+  // Screen Orientation Lock has no effect on iPhone Safari (no element full screen there either,
+  // since requestFullscreen itself is unsupported), so touch players can get stuck in portrait
+  // with the 8/5 game boxed into a thin strip. Nudge them to rotate by hand in that case.
+  const rotateHint = document.getElementById("rotateHint");
+  function updateRotateHint() {
+    if (!touch) return;
+    rotateHint.hidden = document.fullscreenElement || innerWidth >= innerHeight;
+  }
+  function setupRotateHint() {
+    if (!touch) return;
+    rotateHint.addEventListener("click", goFullscreen);
+    addEventListener("resize", updateRotateHint);
+    addEventListener("orientationchange", updateRotateHint);
+    document.addEventListener("fullscreenchange", updateRotateHint);
+    updateRotateHint();
+  }
+
+  // ---------- on-screen keyboard ----------
+  // The game draws its own text-entry dialogs (e.g. "What is your name?") and reads real
+  // keystrokes; on desktop a physical keyboard already reaches it with no code here. On touch
+  // there is no physical keyboard, so a button focuses a real (but invisible) <input>, which is
+  // what makes the OS raise its on-screen keyboard, and every keystroke from it is translated
+  // into the DOS key the game expects instead of letting the browser type into the hidden input.
+  // GLFW key codes for letters/digits/space are their own uppercase ASCII codes, so a lowercase
+  // letter is just "send the key" (SDL yields lowercase with no shift held) and an uppercase one
+  // additionally holds left shift for that one press.
+  const KEY_BACKSPACE = 259, KEY_ENTER = 257, KEY_TAB = 258, KEY_LSHIFT = 340;
+  function sendChar(ch) {
+    if (/[a-z]/.test(ch)) {
+      gameCi.simulateKeyPress(ch.toUpperCase().charCodeAt(0));
+    } else if (/[A-Z]/.test(ch)) {
+      gameCi.sendKeyEvent(KEY_LSHIFT, true);
+      gameCi.simulateKeyPress(ch.charCodeAt(0));
+      gameCi.sendKeyEvent(KEY_LSHIFT, false);
+    } else if (ch.charCodeAt(0) >= 32 && ch.charCodeAt(0) < 127) {
+      gameCi.simulateKeyPress(ch.charCodeAt(0)); // digits/space/basic punctuation: GLFW matches ASCII here
+    }
+  }
+  function setupKeyboardButton() {
+    if (!touch) return;
+    kbBtn.hidden = false;
+    kbBtn.addEventListener("click", () => kbInput.focus());
+    kbInput.addEventListener("keydown", (e) => {
+      if (!gameCi) return;
+      if (e.key === "Backspace") gameCi.simulateKeyPress(KEY_BACKSPACE);
+      else if (e.key === "Enter") gameCi.simulateKeyPress(KEY_ENTER);
+      else if (e.key === "Tab") gameCi.simulateKeyPress(KEY_TAB);
+      else if (e.key.length === 1) sendChar(e.key);
+      else return;
+      e.preventDefault();
+    });
+  }
+})();
+</script>
+</body>
+</html>
