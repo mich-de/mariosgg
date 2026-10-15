@@ -95,7 +95,8 @@ Ogni gioco vive nei suoi overlay (gli indirizzi nei commenti del codice si rifer
 
 ### 4. Portare le macchine a stati, tick per tick
 
-L'originale è guidato da un timer a 10 Hz: a ogni tick esegue un elenco fisso di routine, ognuna
+L'originale è guidato da un timer che scatta ogni 110 ms (ogni secondo tick del clock BIOS, circa
+9,1 volte al secondo): a ogni tick esegue un elenco fisso di routine, ognuna
 una piccola macchina a stati con il proprio contatore (`switch (state) … state++`) che aspetta cose
 come "Mario sta ancora parlando?", "le carte hanno finito di volare?" o un conto alla rovescia. Il
 porting mantiene esattamente questa struttura — le stesse routine, gli stessi stati, nello stesso

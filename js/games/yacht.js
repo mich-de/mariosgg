@@ -3,7 +3,7 @@
 // announcement of the line he scores (13e4 / 2787), the player's turn (0b34) and clicks (window
 // procedure), the dice (14fd), idle chatter (0eb2 / 0fcb / 1081), the end (1632) and New Game
 // (18b5). Layout (2911): score cards are part of the background; line highlights (Pak 6011) at
-// (7 | 225, 29 + 11*row); scores right-aligned in three characters at x 80 | 298, y 31 + 11*row;
+// (7 | 225, 29 + 11*row); scores right-aligned in two characters at x 80 | 298, y 31 + 11*row;
 // totals at (73|291, 164); dice at (103 + 23*i, 145), kept ones 10 px lower; the player's
 // dice-cups at (246 + 17*i, 180), Mario's at (105 + 12*i, 104).
 
@@ -710,25 +710,43 @@ export default class Yacht extends GameBase {
     if (!this.talker) return;
     this.tickCommon();
   }
-  num(font, v, x, y) {
-    this.e.gfx.text(font, String(v).padStart(3, " "), x, y);
+  // 7783:2d41: glyph = character - 0x20, each one (the space too) advancing by its own width
+  str(font, s, max, x, y) {
+    const g = this.e.gfx, p = this.e.prs.pak(font);
+    for (const c of s.slice(0, max)) {
+      const f = p.frames[g.glyph(c.charCodeAt(0))];
+      g.s.blit(f, x, y);
+      x += f.x + f.w;
+    }
+  }
+  // 2e29: the same, centred in `width` pixels as if every character were as wide as a "Q"
+  strCentered(font, s, max, x, y, width) {
+    const q = this.e.prs.pak(font).frames[0x31];
+    this.str(font, s, max, x + Math.trunc((width - s.length * (q.x + q.w)) / 2), y);
+  }
+  // 2ccb: a number right-justified in width-1 characters (2 for a line, 3 for a total), drawn
+  // three characters at most
+  num(font, v, width, x, y) {
+    const s = String(v);
+    if (s.length + 1 > width) return;
+    this.str(font, s.padStart(width - 1, " "), 3, x, y);
   }
   render(scr) {
     const g = this.e.gfx;
     scr.clear(0);
     g.bg(6001);
     if (!this.talker) return;
-    this.drawName(269, 19);
+    this.strCentered(223, this.e.prefs.name || "My Friend", 11, 234, 19, 70); // 2e29
     if (this.hl.m >= 0) g.frame(6011, this.hl.m, 7, 29 + 11 * this.hl.m);
     if (this.hl.p >= 0) g.frame(6011, this.hl.p, 225, 29 + 11 * this.hl.p);
     const showPossible = this.whose === "p" && this.state === "choose" && this.dice.every((d) => d.v > 0);
     for (let r = 0; r < ROWS; r++) {
-      if (this.card.m[r] !== null) this.num(223, this.card.m[r], 80, 31 + 11 * r);
-      if (this.card.p[r] !== null) this.num(223, this.card.p[r], 298, 31 + 11 * r);
-      else if (showPossible) this.num(225, scoreOf(r, this.values()), 298, 31 + 11 * r);
+      if (this.card.m[r] !== null) this.num(223, this.card.m[r], 3, 80, 31 + 11 * r);
+      if (this.card.p[r] !== null) this.num(223, this.card.p[r], 3, 298, 31 + 11 * r);
+      else if (showPossible) this.num(225, scoreOf(r, this.values()), 3, 298, 31 + 11 * r);
     }
-    this.num(223, this.total("m"), 73, 164);
-    this.num(223, this.total("p"), 291, 164);
+    this.num(223, this.total("m"), 4, 73, 164);
+    this.num(223, this.total("p"), 4, 291, 164);
     this.talker.drawText();
     this.sp.draw();
     for (let i = 0; i < this.cups.m; i++) g.frame(6010, 13, 105 + 12 * i, 104);

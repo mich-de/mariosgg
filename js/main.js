@@ -73,10 +73,25 @@ async function boot() {
   document.addEventListener("fullscreenchange", syncFs);
   fsBtn.addEventListener("click", enterFs);
 
+  // Keep the screen on while playing: phones dim and lock after a short time without touches,
+  // and Mario's turns, his chatter and the animations easily last longer than that. The lock is
+  // dropped by the browser whenever the page is hidden, so it is asked for again on return.
+  let wakeLock = null;
+  const keepAwake = async () => {
+    if (wakeLock || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => (wakeLock = null));
+    } catch (e) {}
+  };
+  document.addEventListener("visibilitychange", keepAwake);
+  document.addEventListener("pointerdown", keepAwake, { passive: true }); // Safari wants a tap
+
   $("status").textContent = "Ready.";
   const start = $("start");
   const go = () => {
     engine.audio.unlock();
+    keepAwake();
     if (canFs && !params.has("autostart")) enterFs();
     syncFs();
     $("loading").style.display = "none";

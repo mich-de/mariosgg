@@ -1,6 +1,6 @@
 // Go Fish (overlays 6f3e intro, 7000 game, 6ea7 card logic), ported routine by routine from the
 // original's tick-driven state machines: every routine keeps its own state counter and runs once
-// per 10 Hz tick in the order of the tick handler 7000:03b2. Quirks of the original are kept and
+// per ~9.1 Hz tick in the order of the tick handler 7000:03b2. Quirks of the original are kept and
 // marked (sic); the places where it would hang are marked (fix).
 //
 // Rules as the original plays them: 7 cards each, Mario always goes first. Asking for a rank

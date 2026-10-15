@@ -91,7 +91,8 @@ Every game lives in its own overlays (the addresses in the source comments refer
 
 ### 4. Porting the state machines, tick by tick
 
-The original is driven by a 10 Hz timer: every tick runs a fixed list of routines, each one a
+The original is driven by a timer that ticks every 110 ms (every second BIOS clock tick, about
+9.1 times a second): every tick runs a fixed list of routines, each one a
 small state machine with its own counter (`switch (state) … state++`) that waits on things like
 "is Mario still talking?", "have the cards finished flying?" or a countdown. The port keeps
 exactly that structure — the same routines, the same states, in the same order within a tick —

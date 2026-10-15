@@ -1,5 +1,5 @@
 // Movie objects (module 2dd5) driving the timeline player (DrawMovieAt 2d21:077f, sounds 2d21:0986).
-// Time is in 1/600 s; every animation tick (10 Hz) the movie draws at t, fires sounds, then
+// Time is in 1/600 s; every animation tick (~9.1 Hz, see TICK_MS) the movie draws at t, fires sounds, then
 // advances by its step (60).
 
 export class Movie {

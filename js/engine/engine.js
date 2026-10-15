@@ -1,4 +1,4 @@
-// Engine core: scene + modal-layer management, the 10 Hz animation tick the original uses for
+// Engine core: scene + modal-layer management, the ~9.1 Hz animation tick the original uses for
 // its movies, the render loop and pointer/keyboard input mapped to 320x200 coordinates.
 
 import { Screen } from "./screen.js";
@@ -7,6 +7,11 @@ import { Audio } from "./audio.js";
 import { Movie } from "./movie.js";
 
 export class Cancelled extends Error {}
+
+// The original's animation timer (290a:0612 -> 3c4c) posts its tick every 110 ms of a clock that
+// the timer interrupt advances by 55 per BIOS tick (2b26:0050), i.e. every second BIOS tick:
+// 2 * 65536 / 1193182 s = 109.85 ms, about 9.1 ticks a second.
+export const TICK_MS = (2 * 65536 * 1000) / 1193182;
 
 export class Engine {
   constructor(canvas, prs) {
@@ -17,7 +22,7 @@ export class Engine {
     this.scene = null;
     this.layers = []; // modal UI on top of the scene (menus, dialogs); last = topmost
     this.token = { cancelled: false };
-    this.tickMs = 100;
+    this.tickMs = TICK_MS;
     this.speed = 1; // >1 only for automated tests (?debug&speed=N)
     this.lastTick = 0;
     this.tickCount = 0;
@@ -33,7 +38,7 @@ export class Engine {
 
   setSpeed(n) {
     this.speed = n;
-    this.tickMs = 100 / n;
+    this.tickMs = TICK_MS / n;
     this.audio.rate = n;
   }
   setPalette(id) {
