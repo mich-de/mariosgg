@@ -141,8 +141,6 @@ scripts/             unoverlay, resource and table extraction, test harness and 
 scripts/re/          disassembly, annotation and pseudo-code tools
 ```
 
-The earlier DOSBox build (`dosbox.html`, `js-dos/`, `mariosgg.jsdos`) is still in the repository.
-
 ## Credits
 
 *Mario's Game Gallery* © 1995 Interplay Entertainment / Presage Software, made under license

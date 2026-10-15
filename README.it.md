@@ -146,8 +146,6 @@ scripts/             unoverlay, estrazione di risorse e tabelle, strumenti di te
 scripts/re/          strumenti di disassemblaggio, annotazione e pseudo-codice
 ```
 
-La versione precedente con DOSBox (`dosbox.html`, `js-dos/`, `mariosgg.jsdos`) è ancora nel repository.
-
 ## Crediti
 
 *Mario's Game Gallery* © 1995 Interplay Entertainment / Presage Software, realizzato su licenza
