@@ -26,12 +26,13 @@ def dstr(off):
         if off > 0 and 32 <= DG[off-1] < 127: return None  # mid-string
         return s.decode('latin1')
     return None
-pat_call = re.compile(r'lcall 0x([0-9a-f]+), (0x[0-9a-f]+|\d+)')
+# capstone prints small segments in decimal ("lcall 0, 0x1300": the C runtime at 1000)
+pat_call = re.compile(r'lcall (0x[0-9a-f]+|\d+), (0x[0-9a-f]+|\d+)')
 pat_push = re.compile(r'(push|mov \w+,) (0x[0-9a-f]+)$')
 def annotate(line):
     m = pat_call.search(line)
     if m:
-        seg = int(m.group(1), 16) + 0x1000
+        seg = int(m.group(1), 0) + 0x1000
         off = int(m.group(2), 0)
         tgt = THUNK.get((seg, off))
         if tgt:

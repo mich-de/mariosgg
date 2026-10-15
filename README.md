@@ -132,6 +132,14 @@ snaps to the nearest square, without changing what a click means.
 - `node scripts/bot.mjs out/` starts every game from the menu on an emulated phone and plays it to
   the end with touch taps — the regression test run after every change.
 
+## Working on the port
+
+To find out how the original does something, port another routine or change a game, use the
+[`mariosgg-reverse-engineering`](.claude/skills/mariosgg-reverse-engineering/SKILL.md) skill. It
+explains how to get from the executable to the JavaScript, contains the map of addresses and data
+formats, and says how to test and ship a change. Claude Code picks it up by itself in this
+repository.
+
 ## Repository layout
 
 ```
@@ -143,6 +151,7 @@ js/ui/               menu bar, dialogs, help pages, name dialog
 data/                mario.prs.gz (the original resources) and the OPL instrument bank
 scripts/             unoverlay, resource and table extraction, test harness and bot
 scripts/re/          disassembly, annotation and pseudo-code tools
+.claude/skills/      the Claude Code skill: reverse-engineering the exe and changing the port
 ```
 
 ## Credits

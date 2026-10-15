@@ -1,5 +1,6 @@
 node_modules/
 _source/
-.claude/
+.claude/*
+!.claude/skills/
 analysis/
 __pycache__/

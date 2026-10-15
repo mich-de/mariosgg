@@ -43,3 +43,15 @@
 3755:000d swap16
 1b26:0990 SendMessage
 2b26:0990 SendMessage(w,msg,...)
+1000:0f26 LDIV(long,long)  # signed; the long div/mod helpers share 0f40 (cx 0 div, 1 udiv, 2 mod, 3 umod)
+1000:0f35 LMOD(long,long)
+1000:0fd4 LXLSH  # dx:ax <<= cl
+1000:0ff5 LXURSH  # dx:ax >>= cl, unsigned
+1000:1300 rand  # 0..32767, seed DGROUP 0x5e1c
+36b6:0004 BagPick(list)  # shuffle bag {count, index, items}
+1aec:0000 TalkerInit(table,...)
+1aec:005a Talk(movie,text,snd)
+1aec:01a0 Say(i)
+1aec:01e2 SayRandom(list)
+1aec:02b0 IsTalking
+3c63:0114 Fly(steps,x0,y0,x1,y1,pak,frame,arg,cb)

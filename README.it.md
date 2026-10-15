@@ -137,6 +137,14 @@ po' più grande o si aggancia alla casella più vicina, senza cambiare il signif
 - `node scripts/bot.mjs out/` avvia ogni gioco dal menu su un telefono emulato e lo gioca fino alla
   fine con tocchi — il test di regressione eseguito dopo ogni modifica.
 
+## Lavorare sul port
+
+Per scoprire come l'originale fa qualcosa, portare un'altra routine o modificare un gioco c'è la
+skill [`mariosgg-reverse-engineering`](.claude/skills/mariosgg-reverse-engineering/SKILL.md) (in
+inglese). Spiega come si passa dall'eseguibile al JavaScript, contiene la mappa degli indirizzi e
+dei formati, e dice come provare e pubblicare una modifica. Claude Code la usa da solo in questo
+repository.
+
 ## Struttura del repository
 
 ```
@@ -148,6 +156,7 @@ js/ui/               barra dei menu, dialoghi, pagine di aiuto, dialogo del nome
 data/                mario.prs.gz (le risorse originali) e il banco di strumenti OPL
 scripts/             unoverlay, estrazione di risorse e tabelle, strumenti di test e bot
 scripts/re/          strumenti di disassemblaggio, annotazione e pseudo-codice
+.claude/skills/      la skill per Claude Code: reverse engineering dell'exe e modifiche al port
 ```
 
 ## Crediti
