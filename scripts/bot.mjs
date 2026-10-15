@@ -32,20 +32,30 @@ const BOT = `(() => {
     if (!sc.ready || sc.inModal) return { wait: "ck" };
     if (sc.over || !(sc.flags & 1) || sc.talker.talking || sc.ist2 !== 0 || (sc.flags & (0x10 | 0x40 | 8 | 4 | 0x20 | 0x80)))
       return { wait: "ck " + sc.st + "/" + sc.ist2 + "/" + sc.flags };
+    // a point that really lands on square (c, r): big pieces in front (a Bowser) can cover most of it
+    const tapPoint = (c, rr) => {
+      const cl = sc.cell(c, rr);
+      const [pak, fr, ox, oy] = cl.owner !== 2 ? (() => { const p = sc.pieceAt(cl); return [2501, p.frame, p.x, p.y]; })() : [2500, cl.frame, cl.hx, cl.hy];
+      const f = e.gfx.frameInfo(pak, fr), pts = [];
+      for (let y = 0; y < f.h; y += 2) for (let x = 0; x < f.w; x += 2) pts.push([x, y]);
+      pts.sort((a, b) => Math.abs(a[0] - f.w / 2) + Math.abs(a[1] - f.h / 2) - Math.abs(b[0] - f.w / 2) - Math.abs(b[1] - f.h / 2));
+      for (const [x, y] of pts) {
+        const h = sc.hitTest(ox + f.x + x, oy + f.y + y);
+        if (h && h[0] === c && h[1] === rr) return [ox + f.x + x, oy + f.y + y];
+      }
+      return null;
+    };
     if (sc.sel === 0xc8 || !B.path || B.i >= B.path.length) {
       const ms = sc.legalMoves();
       if (!ms.length) return { wait: "nomove" };
-      B.path = ms[r(ms.length)];
+      const ok = ms.filter((m) => m.every(([c, rr]) => tapPoint(c, rr)));
+      const pool = ok.length ? ok : ms;
+      B.path = pool[r(pool.length)];
       B.i = 0;
     }
     const [c, rr] = B.path[B.i++];
-    const cl = sc.cell(c, rr);
-    if (cl.owner !== 2) {
-      const p = sc.pieceAt(cl), f = e.gfx.frameInfo(2501, p.frame);
-      return { x: p.x + f.x + (f.w >> 1), y: p.y + f.y + (f.h >> 1), why: "ck piece " + c + "," + rr };
-    }
-    const f = e.gfx.frameInfo(2500, cl.frame);
-    return { x: cl.hx + f.x + (f.w >> 1), y: cl.hy + f.y + (f.h >> 1), why: "ck to " + c + "," + rr };
+    const pt = tapPoint(c, rr) || [sc.cell(c, rr).ax, sc.cell(c, rr).ay - 6];
+    return { x: pt[0], y: pt[1], why: (sc.cell(c, rr).owner !== 2 ? "ck piece " : "ck to ") + c + "," + rr };
   }
   if (n === "Fish") {
     if (!sc.ready || sc.inModal) return { wait: "fish" };

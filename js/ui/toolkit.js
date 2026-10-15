@@ -24,25 +24,34 @@ export function egaColors(pal) {
 export const CMD = {
   CREDITS: 9, NEW_GAME: 10, EXIT_TO_MENU: 11, EXIT: 12, CHANGE_NAME: 13, MUSIC: 14, SOUND: 15,
   ANIMATED: 16, FORCED_JUMPS: 17, HELP_BACKGAMMON: 20, HELP_CHECKERS: 21, HELP_DOMINOES: 22, HELP_FISH: 23, HELP_YACHT: 24,
+  ASPECT: 30, FULLSCREEN: 31, // not in the original: picture shape and full screen on today's screens
 };
 const OPTS = [{ label: "~Change Name", cmd: CMD.CHANGE_NAME }, { label: "~Music", cmd: CMD.MUSIC, check: "music" }, { label: "~Sound", cmd: CMD.SOUND, check: "sound" }];
+// Added to every Options menu: how wide the 320x200 picture is shown (the original monitor
+// was 4:3; phones default to 16:9) and full screen. A radio item is ticked when its value is the
+// current one.
+const SCREEN = [
+  { sep: true },
+  ...["4:3", "16:10", "16:9"].map((v) => ({ label: "Screen " + v, cmd: CMD.ASPECT, radio: ["aspect", v] })),
+  { label: "Fullscreen", cmd: CMD.FULLSCREEN },
+];
 const GAME_FILE = { title: "~File", items: [{ label: "~New Game", cmd: CMD.NEW_GAME }, { sep: true }, { label: "~Exit to Main Menu", cmd: CMD.EXIT_TO_MENU }] };
 export const MENUS = {
   main: [
     { title: "~File", items: [{ label: "~Credits", cmd: CMD.CREDITS }, { label: "~Exit", cmd: CMD.EXIT }] },
-    { title: "~Options", items: OPTS },
+    { title: "~Options", items: [...OPTS, ...SCREEN] },
     { title: "~Help", items: [
       { label: "~Backgammon Help", cmd: CMD.HELP_BACKGAMMON }, { label: "~Checkers Help", cmd: CMD.HELP_CHECKERS },
       { label: "~Dominoes Help", cmd: CMD.HELP_DOMINOES }, { label: "~Go Fish Help", cmd: CMD.HELP_FISH }, { label: "~Yacht Help", cmd: CMD.HELP_YACHT },
     ] },
   ],
-  fish: [GAME_FILE, { title: "~Options", items: OPTS }, { title: "~Help", items: [{ label: "~Go Fish Help", cmd: CMD.HELP_FISH }] }],
-  checkers: [GAME_FILE, { title: "~Options", items: [...OPTS, { sep: true }, { label: "~Forced Jumps", cmd: CMD.FORCED_JUMPS, check: "forcedJumps" }] },
+  fish: [GAME_FILE, { title: "~Options", items: [...OPTS, ...SCREEN] }, { title: "~Help", items: [{ label: "~Go Fish Help", cmd: CMD.HELP_FISH }] }],
+  checkers: [GAME_FILE, { title: "~Options", items: [...OPTS, { sep: true }, { label: "~Forced Jumps", cmd: CMD.FORCED_JUMPS, check: "forcedJumps" }, ...SCREEN] },
     { title: "~Help", items: [{ label: "~Checkers Help", cmd: CMD.HELP_CHECKERS }] }],
-  dominoes: [GAME_FILE, { title: "~Options", items: OPTS }, { title: "~Help", items: [{ label: "~Dominoes Help", cmd: CMD.HELP_DOMINOES }] }],
-  backgammon: [GAME_FILE, { title: "~Options", items: [...OPTS, { sep: true }, { label: "~Animated Pieces", cmd: CMD.ANIMATED, check: "animated" }] },
+  dominoes: [GAME_FILE, { title: "~Options", items: [...OPTS, ...SCREEN] }, { title: "~Help", items: [{ label: "~Dominoes Help", cmd: CMD.HELP_DOMINOES }] }],
+  backgammon: [GAME_FILE, { title: "~Options", items: [...OPTS, { sep: true }, { label: "~Animated Pieces", cmd: CMD.ANIMATED, check: "animated" }, ...SCREEN] },
     { title: "~Help", items: [{ label: "~Backgammon Help", cmd: CMD.HELP_BACKGAMMON }] }],
-  yacht: [GAME_FILE, { title: "~Options", items: OPTS }, { title: "~Help", items: [{ label: "~Yacht Help", cmd: CMD.HELP_YACHT }] }],
+  yacht: [GAME_FILE, { title: "~Options", items: [...OPTS, ...SCREEN] }, { title: "~Help", items: [{ label: "~Yacht Help", cmd: CMD.HELP_YACHT }] }],
 };
 
 const plain = (s) => s.replace("~", "");
@@ -120,7 +129,8 @@ export class MenuBar {
       const sel = i === this.hover;
       const bg = sel ? G : Y;
       if (sel) s.fillRect((b.col + 1) * 8, row * 8, (b.col + b.w - 1) * 8, row * 8 + 8, G);
-      if (it.check && this.e.prefs[it.check]) s.char8(0xfb, (b.col + 1) * 8, row * 8, K, bg);
+      const ticked = it.check ? this.e.prefs[it.check] : it.radio && (this.e.prefs[it.radio[0]] || this.e.defaultAspect) === it.radio[1];
+      if (ticked) s.char8(0xfb, (b.col + 1) * 8, row * 8, K, bg);
       this.drawLabel(s, it.label, b.col + 2, row, it.disabled ? D : K, bg, R);
     });
   }
@@ -192,6 +202,10 @@ export class MenuBar {
     return true;
   }
   fire(it) {
+    if (it.radio) {
+      this.e.prefs[it.radio[0]] = it.radio[1];
+      this.e.savePrefs();
+    }
     if (it.check) {
       this.e.prefs[it.check] = !this.e.prefs[it.check];
       this.e.savePrefs();

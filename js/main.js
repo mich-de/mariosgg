@@ -53,6 +53,16 @@ async function boot() {
   }
 
   const isTouch = matchMedia("(pointer: coarse)").matches;
+  // Picture shape (Options > Screen): 4:3 like the original monitor, or stretched to 16:10 /
+  // 16:9; phones start at 16:9. Pointer mapping follows the canvas box, so any shape works.
+  engine.defaultAspect = isTouch ? "16:9" : "4:3";
+  engine.applyAspect = () => {
+    const [w, h] = (engine.prefs.aspect || engine.defaultAspect).split(":");
+    document.documentElement.style.setProperty("--arw", w);
+    document.documentElement.style.setProperty("--arh", h);
+    if (engine.syncFs) engine.syncFs();
+  };
+  engine.applyAspect();
   $("rotate").classList.toggle("show", isTouch);
   const fsBtn = $("fs");
   const canFs = document.fullscreenEnabled && isTouch;
@@ -62,15 +72,21 @@ async function boot() {
       if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {});
     } catch (e) {}
   };
-  // the button only shows while not fullscreen, and fades so it does not hide the corner
+  // The button only shows while not fullscreen and only when the picture leaves room beside it
+  // (in 16:9 it would cover the game and take its taps; Options > Fullscreen is always there).
+  // It fades so it does not hide the corner.
   let fadeT = 0;
   const syncFs = () => {
-    fsBtn.style.display = canFs && !document.fullscreenElement ? "block" : "none";
+    const room = (window.innerWidth - $("screen").getBoundingClientRect().width) / 2 >= 96;
+    fsBtn.style.display = canFs && room && !document.fullscreenElement ? "block" : "none";
     fsBtn.classList.remove("faded");
     clearTimeout(fadeT);
     fadeT = setTimeout(() => fsBtn.classList.add("faded"), 4000);
   };
+  engine.syncFs = syncFs;
+  engine.enterFs = enterFs;
   document.addEventListener("fullscreenchange", syncFs);
+  window.addEventListener("resize", syncFs);
   fsBtn.addEventListener("click", enterFs);
 
   // Keep the screen on while playing: phones dim and lock after a short time without touches,

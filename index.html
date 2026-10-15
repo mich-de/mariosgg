@@ -9,15 +9,17 @@
 <title>Mario's Game Gallery</title>
 <link rel="icon" href="assets/icon.png">
 <style>
-  :root { --bg: #000; --fg: #ffe94a; --dim: #b8a24a; }
+  :root { --bg: #000; --fg: #ffe94a; --dim: #b8a24a; --arw: 4; --arh: 3; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
     font-family: "Courier New", ui-monospace, monospace; -webkit-user-select: none; user-select: none;
     -webkit-touch-callout: none; touch-action: none; overscroll-behavior: none; }
   #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  /* The 320x200 frame is meant for a 4:3 display (non-square pixels). */
-  #screen { display: block; width: min(100vw, calc(100vh * 4 / 3)); width: min(100dvw, calc(100dvh * 4 / 3));
-    aspect-ratio: 4 / 3; height: auto; touch-action: none; background: #000; image-rendering: auto; }
+  /* The 320x200 frame was meant for a 4:3 display (non-square pixels); Options > Screen can widen
+     it to 16:10 or 16:9 (--arw / --arh, set by main.js). */
+  #screen { display: block; width: min(100vw, calc(100vh * var(--arw) / var(--arh)));
+    width: min(100dvw, calc(100dvh * var(--arw) / var(--arh)));
+    aspect-ratio: var(--arw) / var(--arh); height: auto; touch-action: none; background: #000; image-rendering: auto; }
   #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 14px; text-align: center; padding: 16px; background: #000; z-index: 10; }
   #loading h1 { margin: 0; font-size: clamp(18px, 5vw, 32px); letter-spacing: 1px; }

@@ -29,8 +29,11 @@ Open **https://mich-de.github.io/mariosgg/** (or serve this folder with any stat
 and press **PLAY**.
 
 - **Desktop:** point and click, as in 1995. The File / Options / Help menus work as in the original.
-- **Phone or tablet:** tap. Hold the phone sideways; the ⛶ button switches to full screen.
+- **Phone or tablet:** tap. Hold the phone sideways; *Options › Fullscreen* (or the corner
+  button, when there is room beside the picture) switches to full screen.
   Hit areas that were only a few pixels wide in the original are a little larger for fingers.
+- **Screen shape:** *Options › Screen* shows the picture at 4:3 (as on the original monitor),
+  16:10 or 16:9 (stretched to fill a phone; the default there). The choice is remembered.
 
 ## Screenshots
 

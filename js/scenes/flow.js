@@ -43,6 +43,10 @@ export class App {
         return this.askName();
       case CMD.EXIT_TO_MENU:
         return this.mainMenu(true);
+      case CMD.ASPECT:
+        return e.applyAspect && e.applyAspect();
+      case CMD.FULLSCREEN:
+        return e.enterFs && e.enterFs();
     }
   }
   async help(game) {

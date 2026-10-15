@@ -30,9 +30,12 @@ server statico) e premi **PLAY**.
 
 - **Desktop:** punta e clicca, come nel 1995. I menu File / Options / Help funzionano come
   nell'originale.
-- **Telefono o tablet:** tocca. Tieni il telefono in orizzontale; il pulsante ⛶ passa a schermo
-  intero. Le zone cliccabili che nell'originale erano larghe pochi pixel sono un po' più grandi
-  per le dita.
+- **Telefono o tablet:** tocca. Tieni il telefono in orizzontale; *Options › Fullscreen* (o il
+  pulsante nell'angolo, quando c'è spazio accanto all'immagine) passa a schermo intero. Le zone
+  cliccabili che nell'originale erano larghe pochi pixel sono un po' più grandi per le dita.
+- **Formato dello schermo:** *Options › Screen* mostra l'immagine in 4:3 (come sul monitor
+  originale), 16:10 o 16:9 (allargata per riempire il telefono; è la scelta predefinita lì). La
+  scelta viene ricordata.
 
 ## Schermate
 
