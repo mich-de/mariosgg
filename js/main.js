@@ -1,0 +1,123 @@
+// Boot: load mario.prs (the original data file), start the engine, run the title sequence.
+
+import { PRS } from "./engine/res.js";
+import { Engine } from "./engine/engine.js";
+import { Music } from "./engine/music.js";
+import { startGame } from "./scenes/flow.js";
+
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+
+async function fetchWithProgress(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(url + ": HTTP " + res.status);
+  const total = +res.headers.get("content-length") || 0;
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    if (total) onProgress(got / total);
+  }
+  return new Blob(chunks);
+}
+
+async function loadPrs() {
+  const blob = await fetchWithProgress("data/mario.prs.gz", (f) => ($("bar").firstElementChild.style.width = (f * 100).toFixed(0) + "%"));
+  // GitHub Pages may or may not have already gunzipped it on the wire; sniff the magic.
+  const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  if (head[0] === 0x1f && head[1] === 0x8b) {
+    const ds = blob.stream().pipeThrough(new DecompressionStream("gzip"));
+    return await new Response(ds).arrayBuffer();
+  }
+  return await blob.arrayBuffer();
+}
+
+async function boot() {
+  let buf;
+  try {
+    buf = await loadPrs();
+  } catch (err) {
+    $("status").textContent = "Could not load the game data: " + err.message;
+    return;
+  }
+  const prs = new PRS(buf);
+  const engine = new Engine($("screen"), prs);
+  engine.audio.music = new Music(engine.audio, prs);
+  if (params.has("debug")) {
+    window.__mgg = engine;
+    if (params.has("speed")) engine.setSpeed(Math.max(1, +params.get("speed") || 1));
+  }
+
+  const isTouch = matchMedia("(pointer: coarse)").matches;
+  // Picture shape (Options > Screen): 4:3 like the original monitor, or stretched to 16:10 /
+  // 16:9; phones start at 16:9. Pointer mapping follows the canvas box, so any shape works.
+  engine.defaultAspect = isTouch ? "16:9" : "4:3";
+  engine.applyAspect = () => {
+    const [w, h] = (engine.prefs.aspect || engine.defaultAspect).split(":");
+    document.documentElement.style.setProperty("--arw", w);
+    document.documentElement.style.setProperty("--arh", h);
+    if (engine.syncFs) engine.syncFs();
+  };
+  engine.applyAspect();
+  $("rotate").classList.toggle("show", isTouch);
+  const fsBtn = $("fs");
+  const canFs = document.fullscreenEnabled && isTouch;
+  const enterFs = async () => {
+    try {
+      await document.documentElement.requestFullscreen({ navigationUI: "hide" });
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {});
+    } catch (e) {}
+  };
+  // The button only shows while not fullscreen and only when the picture leaves room beside it
+  // (in 16:9 it would cover the game and take its taps; Options > Fullscreen is always there).
+  // It fades so it does not hide the corner.
+  let fadeT = 0;
+  const syncFs = () => {
+    const room = (window.innerWidth - $("screen").getBoundingClientRect().width) / 2 >= 96;
+    fsBtn.style.display = canFs && room && !document.fullscreenElement ? "block" : "none";
+    fsBtn.classList.remove("faded");
+    clearTimeout(fadeT);
+    fadeT = setTimeout(() => fsBtn.classList.add("faded"), 4000);
+  };
+  engine.syncFs = syncFs;
+  engine.enterFs = enterFs;
+  document.addEventListener("fullscreenchange", syncFs);
+  window.addEventListener("resize", syncFs);
+  fsBtn.addEventListener("click", enterFs);
+
+  // Keep the screen on while playing: phones dim and lock after a short time without touches,
+  // and Mario's turns, his chatter and the animations easily last longer than that. The lock is
+  // dropped by the browser whenever the page is hidden, so it is asked for again on return.
+  let wakeLock = null;
+  const keepAwake = async () => {
+    if (wakeLock || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => (wakeLock = null));
+    } catch (e) {}
+  };
+  document.addEventListener("visibilitychange", keepAwake);
+  document.addEventListener("pointerdown", keepAwake, { passive: true }); // Safari wants a tap
+
+  $("status").textContent = "Ready.";
+  const start = $("start");
+  const go = () => {
+    engine.audio.unlock();
+    keepAwake();
+    if (canFs && !params.has("autostart")) enterFs();
+    syncFs();
+    $("loading").style.display = "none";
+    startGame(engine, params.get("scene"));
+  };
+  if (params.has("autostart")) go();
+  else {
+    start.style.display = "block";
+    start.addEventListener("click", go, { once: true });
+  }
+}
+
+boot();

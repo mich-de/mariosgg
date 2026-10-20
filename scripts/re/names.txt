@@ -1,0 +1,57 @@
+2339:2a75 HLock
+2339:2ac2 HUnlock
+2339:2a03 DisposeHandle
+333c:2210 GetResource(tag,id)
+333c:2307 ResNoPurge?
+35a7:0007 LoadPak(id)
+35a7:002b ReleasePak(h)
+35a7:01e1 DrawPakFrame(x,y,pak,frame)
+356e:00b3 OffsetRect(r,dh,dv)
+356e:0220 SectRect(dst,a,b)
+1000:0e6c farmemcpy
+2d21:01e6 LoadMovie(id)
+2d21:03cf DisposeMovie(h)
+2d21:077f DrawMovieAt(h,t32,x,y,inval,clip)
+1919:00bb CreateSprite(x,y,pak,frame,id)
+1919:0179 CreateSpriteAnon(x,y,pak,frame)
+1919:0228 DeleteAllSprites
+1919:0294 DeleteSprite(id)
+1919:0916 HideSprite(id)
+1919:0928 ShowSprite(id)
+1919:09b4 SpriteToBack(id)
+1919:0a39 SpriteToFront(id)
+1919:0360 DrawSprites?
+35a7:03a9 PakFrameRect(&r,pak,frame,x,y)
+2dd5:0005 MovOpen(obj)
+2dd5:0065 MovClose(obj)
+2dd5:0083 MovSetPaused(obj,f)
+2dd5:00ba MovIsPaused(obj)
+2dd5:00ca MovSetHidden(obj,f)
+2dd5:0101 MovIsHidden(obj)
+2dd5:0111 MovDraw(obj)
+2dd5:0170 MovDrawClip(obj,rgn)
+2dd5:01cc MovAdvanceOnce(obj)
+2dd5:0256 MovAdvanceThenClose(obj)
+2dd5:02e2 MovAdvanceLoop(obj)
+2dd5:0368 MovSounds(obj)
+2dd5:03af MovOpenStep(obj,step)
+1408:000c DrawText(font,str,max,x,y)
+1408:00bd DrawTextRight(font,str,max,x,y)
+1408:0170 DrawTextCentered(font,str,max,x,y)
+35a7:01fb FrameSize(&wh,pak,frame)
+35a7:03c7 FrameOffset(pak,frame,&x,&y)
+3755:000d swap16
+1b26:0990 SendMessage
+2b26:0990 SendMessage(w,msg,...)
+1000:0f26 LDIV(long,long)  # signed; the long div/mod helpers share 0f40 (cx 0 div, 1 udiv, 2 mod, 3 umod)
+1000:0f35 LMOD(long,long)
+1000:0fd4 LXLSH  # dx:ax <<= cl
+1000:0ff5 LXURSH  # dx:ax >>= cl, unsigned
+1000:1300 rand  # 0..32767, seed DGROUP 0x5e1c
+36b6:0004 BagPick(list)  # shuffle bag {count, index, items}
+1aec:0000 TalkerInit(table,...)
+1aec:005a Talk(movie,text,snd)
+1aec:01a0 Say(i)
+1aec:01e2 SayRandom(list)
+1aec:02b0 IsTalking
+3c63:0114 Fly(steps,x0,y0,x1,y1,pak,frame,arg,cb)
