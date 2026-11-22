@@ -6,11 +6,17 @@
 
 const OPL_RATE = 49716;
 const MULT = [0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 12, 12, 15, 15];
+const SIN_N = 4096;
+const SIN = new Float32Array(SIN_N);
+for (let i = 0; i < SIN_N; i++) SIN[i] = Math.sin((2 * Math.PI * i) / SIN_N);
+const AMP = new Float32Array(137); // AMP[a + 40] = 10^(-a/20), a in [-40, 96]
+for (let a = -40; a <= 96; a++) AMP[a + 40] = Math.pow(10, -a / 20);
+const attAmp = (a) => AMP[Math.min(136, Math.max(0, Math.round(a) + 40))];
 // attack time (ms, 0 -> max) for rate index (4*R + rof) / 4 ; decay time per 96 dB
 
 function wave(w, ph) {
   // ph in [0,1)
-  const s = Math.sin(2 * Math.PI * ph);
+  const s = SIN[Math.min(SIN_N - 1, (ph * SIN_N) | 0)];
   switch (w) {
     case 1: return s > 0 ? s : 0;
     case 2: return Math.abs(s);
@@ -86,6 +92,7 @@ class OplSynth extends AudioWorkletProcessor {
     this.tremPh = 0;
     this.vibPh = 0;
     this.clock = 0;
+    this.light = /(LGTV|LG WebOSTV|Web0S|webos|Tizen)/i.test(navigator.userAgent); this.loadMax = 0; this.repT = 0;
     this.port.onmessage = (e) => this.msg(e.data);
   }
   msg(d) {
@@ -107,6 +114,7 @@ class OplSynth extends AudioWorkletProcessor {
     } else if (d.type === "volume") {
       this.gain = d.value;
     }
+    else if (d.type === "light") this.light = true; else if (d.type === "full") this.light = false;
   }
   allOff(hard) {
     for (const v of this.voices) {
@@ -137,6 +145,7 @@ class OplSynth extends AudioWorkletProcessor {
     v.transpose = (t[0] << 24) >> 24;
     v.m.set(0, t[1], t[2], t[3], t[4], t[5]);
     v.fb = (t[6] >> 1) & 7;
+    v.fbDiv = Math.pow(2, 9 - v.fb);
     v.con = t[6] & 1;
     v.c.set(0, t[7], t[8], t[9], t[10], t[11]);
     this.updateFreq(v);
@@ -275,6 +284,10 @@ class OplSynth extends AudioWorkletProcessor {
     const sr = sampleRate;
     const n = out.length;
     const dtMs = 1000 / sr;
+    const light = this.light;
+    const vLimit = light ? 6 : 9;
+    const step = light ? 16 : 8;
+    const t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : 0;
     // advance the 120 Hz sequencer clock
     this.acc = (this.acc || 0) + n / sr;
     while (this.acc >= 1 / 120) {
@@ -282,18 +295,21 @@ class OplSynth extends AudioWorkletProcessor {
       this.runSeq();
       if (this.playing) this.tick++;
     }
+    const trem = light ? 0 : (1 - Math.cos(2 * Math.PI * this.tremPh)) * 0.5 * 1.0; // dB (shallow)
+    const vib = light ? 0 : Math.sin(2 * Math.PI * this.vibPh) * 0.0035;
     for (let i = 0; i < n; i++) {
-      this.tremPh += 3.7 / sr;
-      this.vibPh += 6.1 / sr;
-      const trem = (1 - Math.cos(2 * Math.PI * this.tremPh)) * 0.5 * 1.0; // dB (shallow)
-      const vib = Math.sin(2 * Math.PI * this.vibPh) * 0.0035;
+      if (!light) {
+        this.tremPh += 3.7 / sr;
+        this.vibPh += 6.1 / sr;
+      }
       let s = 0;
-      for (const v of this.voices) {
+      for (let vi = 0; vi < vLimit; vi++) {
+        const v = this.voices[vi];
         if (v.c.stage === 4 && v.m.stage === 4) continue;
         const m = v.m, c = v.c;
-        if (i % 8 === 0) {
-          this.envStep(m, dtMs * 8);
-          this.envStep(c, dtMs * 8);
+        if (i % step === 0) {
+          this.envStep(m, dtMs * step);
+          this.envStep(c, dtMs * step);
         }
         const f = v.freq;
         const fm = f * m.mult * (m.vib ? 1 + vib : 1);
@@ -301,18 +317,30 @@ class OplSynth extends AudioWorkletProcessor {
         m.ph = (m.ph + fm / sr) % 1;
         c.ph = (c.ph + fc / sr) % 1;
         // modulator with feedback
-        const fbIn = v.fb ? ((m.prev + m.out) * 4) / Math.pow(2, 9 - v.fb) : 0;
+        const fbIn = v.fb ? ((m.prev + m.out) * 4) / v.fbDiv : 0;
         const mAtt = m.env + m.tl * 0.75 + (m.kslAtt || 0) + (m.volAtt || 0) + (m.am ? trem : 0);
-        const mOut = mAtt >= 96 ? 0 : wave(m.ws, (m.ph + fbIn + 4) % 1) * Math.pow(10, -mAtt / 20);
+        const mOut = mAtt >= 96 ? 0 : wave(m.ws, (m.ph + fbIn + 4) % 1) * attAmp(mAtt);
         m.prev = m.out;
         m.out = mOut;
         const cAtt = c.env + c.tl * 0.75 + (c.kslAtt || 0) + (c.volAtt || 0) + (c.am ? trem : 0);
         let cOut;
-        if (v.con === 0) cOut = cAtt >= 96 ? 0 : wave(c.ws, (c.ph + mOut * 4 + 8) % 1) * Math.pow(10, -cAtt / 20);
-        else cOut = (cAtt >= 96 ? 0 : wave(c.ws, c.ph) * Math.pow(10, -cAtt / 20)) + mOut;
+        if (v.con === 0) cOut = cAtt >= 96 ? 0 : wave(c.ws, (c.ph + mOut * 4 + 8) % 1) * attAmp(cAtt);
+        else cOut = (cAtt >= 96 ? 0 : wave(c.ws, c.ph) * attAmp(cAtt)) + mOut;
         s += cOut;
       }
       out[i] = Math.max(-1, Math.min(1, s * 0.16 * this.gain));
+    }
+    // report synthesis load (CPU ms per block) so the page can enable light mode
+    if (t0) {
+      const dt = performance.now() - t0;
+      const bd = n / sr * 1000;
+      this.loadMax = Math.max(this.loadMax || 0, dt / bd);
+    }
+    this.repT += n / sr * 1000;
+    if (this.repT >= 500) {
+      this.port.postMessage({ type: "load", load: this.loadMax || 0 });
+      this.loadMax = 0;
+      this.repT = 0;
     }
     for (let k = 1; k < outputs[0].length; k++) outputs[0][k].set(out);
     return true;

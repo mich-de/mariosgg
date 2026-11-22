@@ -10,6 +10,8 @@ export class Music {
     this.node = null;
     this.ready = null;
     this.timbres = null;
+    this.degraded = /(LGTV|LG WebOSTV|Web0S|webos|Tizen)/i.test(navigator.userAgent);
+    this.loadRatio = 0;
   }
   async init() {
     const ctx = this.audio.ctx;
@@ -20,6 +22,10 @@ export class Music {
         const buf = await (await fetch("data/midpak.ad")).arrayBuffer();
         this.timbres = parseGTL(new Uint8Array(buf));
         this.node = new AudioWorkletNode(ctx, "opl-synth", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+        this.node.port.onmessage = (e) => {
+          if (e.data && e.data.type === "load") this.setLoad(e.data.load);
+        };
+        if (this.degraded) this.node.port.postMessage({ type: "light" });
         this.node.connect(ctx.destination);
         this.node.port.postMessage({ type: "timbres", list: this.timbres });
         return true;
@@ -56,6 +62,16 @@ export class Music {
     if (!keep) this.current = null;
     this.endsAt = 0;
     if (this.node) this.node.port.postMessage({ type: "stop" });
+  }
+  setLoad(load) {
+    this.loadRatio = load;
+    if (load > 0.6) this.setLight(true);
+    else if (load < 0.25) this.setLight(false);
+  }
+  setLight(on) {
+    if (on === this.degraded) return;
+    this.degraded = on;
+    if (this.node) this.node.port.postMessage({ type: on ? "light" : "full" });
   }
 }
 
