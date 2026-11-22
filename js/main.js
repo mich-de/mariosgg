@@ -26,10 +26,11 @@ async function fetchWithProgress(url, onProgress) {
 }
 
 async function loadPrs() {
-  const blob = await fetchWithProgress("data/mario.prs.gz", (f) => ($("bar").firstElementChild.style.width = (f * 100).toFixed(0) + "%"));
+  const canStream = typeof DecompressionStream !== "undefined";
+  const blob = await fetchWithProgress(canStream ? "data/mario.prs.gz" : "data/mario.prs", (f) => ($("bar").firstElementChild.style.width = (f * 100).toFixed(0) + "%"));
   // GitHub Pages may or may not have already gunzipped it on the wire; sniff the magic.
   const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
-  if (head[0] === 0x1f && head[1] === 0x8b) {
+  if (canStream && head[0] === 0x1f && head[1] === 0x8b) {
     const ds = blob.stream().pipeThrough(new DecompressionStream("gzip"));
     return await new Response(ds).arrayBuffer();
   }
