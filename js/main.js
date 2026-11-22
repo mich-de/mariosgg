@@ -54,9 +54,11 @@ async function boot() {
   }
 
   const isTouch = matchMedia("(pointer: coarse)").matches;
+  // TVs have no mouse or touch pointer: detect them so they get the 16:9 shape and fullscreen.
+  const isTV = matchMedia("(pointer: none)").matches || /(?:LGTV|LGWebOS|Web0S|webOS|Tizen)/i.test(navigator.userAgent);
   // Picture shape (Options > Screen): 4:3 like the original monitor, or stretched to 16:10 /
   // 16:9; phones start at 16:9. Pointer mapping follows the canvas box, so any shape works.
-  engine.defaultAspect = isTouch ? "16:9" : "4:3";
+  engine.defaultAspect = isTouch || isTV ? "16:9" : "4:3";
   engine.applyAspect = () => {
     const [w, h] = (engine.prefs.aspect || engine.defaultAspect).split(":");
     document.documentElement.style.setProperty("--arw", w);
@@ -66,7 +68,7 @@ async function boot() {
   engine.applyAspect();
   $("rotate").classList.toggle("show", isTouch);
   const fsBtn = $("fs");
-  const canFs = document.fullscreenEnabled && isTouch;
+  const canFs = document.fullscreenEnabled && (isTouch || isTV);
   const enterFs = async () => {
     try {
       await document.documentElement.requestFullscreen({ navigationUI: "hide" });
